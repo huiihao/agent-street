@@ -24,6 +24,7 @@ class PersonaSnapshot:
     tile_y: int = 0
     location: str = "home"
     is_moving: bool = False
+    color: str = "#888"
     recent_thoughts: list[str] = field(default_factory=list)
     backstory: str = ""
 

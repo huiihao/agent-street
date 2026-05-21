@@ -36,6 +36,7 @@ class ConnectionManager:
                     {
                         "id": p.persona_id,
                         "name": p.name,
+                        "color": p.color,
                         "cash": p.cash,
                         "pnl": p.pnl,
                         "positions": p.positions,

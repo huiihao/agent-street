@@ -41,10 +41,11 @@ class MarketDataProvider:
                         self._price_history[s].append(self._prices[s])
                         if len(self._price_history[s]) > 300:
                             self._price_history[s] = self._price_history[s][-300:]
-                except Exception:
+                except Exception as e:
+                    print(f"MarketData: error for {s} — {e}")
                     continue
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"MarketData: fetch error — {e}")
         self._last_fetch = time.time()
 
     async def fetch_init(self):

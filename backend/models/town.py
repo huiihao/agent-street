@@ -107,8 +107,17 @@ def bfs_path(start: tuple[int, int], end: tuple[int, int], max_steps: int = 40) 
                 visited.add((nx, ny))
                 queue.append(new_path)
 
-    # If no path found, return direct line
-    return [start, end]
+    # If no path found, return direct interpolated path
+    steps = max(abs(end[0] - start[0]), abs(end[1] - start[1]))
+    if steps <= 1:
+        return [start, end]
+    path = []
+    for i in range(steps + 1):
+        t = i / steps
+        px = round(start[0] + (end[0] - start[0]) * t)
+        py = round(start[1] + (end[1] - start[1]) * t)
+        path.append((px, py))
+    return path
 
 
 def get_adjacent_agents(

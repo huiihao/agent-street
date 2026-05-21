@@ -127,6 +127,7 @@ class AgentMemory:
         others = set()
         for o in obs:
             for word in o.content.split():
+                word = word.rstrip(":,;.!\"").rstrip("]") + "]"
                 if word.startswith("[") and word.endswith("]"):
                     others.add(word)
         if others:

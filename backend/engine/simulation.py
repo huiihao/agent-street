@@ -195,7 +195,9 @@ class SimulationLoop:
             defn = PERSONA_DEFINITIONS.get(pid, {})
             pnl = ps.pnl(INITIAL_CASH, prices)
             pnl_pct = pnl / INITIAL_CASH
-            if pnl_pct > 0.05:
+            if pnl_pct > 0.10:
+                mood = "excited"
+            elif pnl_pct > 0.05:
                 mood = "confident"
             elif pnl_pct > 0:
                 mood = "calm"
@@ -210,11 +212,12 @@ class SimulationLoop:
             memory = self.memories.get(pid)
             tx, ty = self.agent_positions.get(pid, (0, 0))
             loc_id = routine.current_location_id() if routine else "home"
-            loc_name = LOCATIONS.get(loc_id, LOCATIONS["home_nw"]).name if loc_id in LOCATIONS else loc_id
+            loc_name = LOCATIONS[loc_id].name if loc_id in LOCATIONS else loc_id
 
             snaps.append(PersonaSnapshot(
                 persona_id=pid,
                 name=defn.get("name", pid),
+                color=defn.get("color", "#888"),
                 cash=round(ps.cash, 2),
                 pnl=round(pnl, 2),
                 positions=ps.holding_count(),

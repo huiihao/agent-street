@@ -38,7 +38,7 @@ class PersonaDecisionEngine:
         # Panic check — also considers memory sentiment
         portfolio_val = persona.portfolio_value(prices)
         pnl_pct = (portfolio_val - 10000) / 10000
-        effective_panic = params.panic_threshold * (1 - 0.3 * memory_sentiment)  # Positive sentiment dulls panic
+        effective_panic = params.panic_threshold * (1 + 0.3 * memory_sentiment)  # Positive sentiment dulls panic (makes threshold more negative)
         if pnl_pct < effective_panic:
             for h in persona.holdings.values():
                 if h.shares > 0:

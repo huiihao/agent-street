@@ -93,7 +93,10 @@ class ConversationSystem:
 
         # Build conversation
         participants = [agent_id] + partners
-        symbol = random.choice(list(prices.keys()))
+        syms = list(prices.keys())
+        if not syms:
+            return None
+        symbol = random.choice(syms)
         sentiment_word = random.choice(SENTIMENT_WORDS)
 
         is_extravert = traits.extraversion > 0.5
