@@ -1,10 +1,10 @@
-// Bootstrap the Mimic Stock Market frontend
 (function () {
   const ws = new WSClient('ws://' + window.location.host + '/ws');
-  const personaGrid = new PersonaGrid('persona-canvas');
+  const townMap = new TownMap('town-canvas');
   const stockChart = new StockChart('chart-canvas');
   const leaderboard = new Leaderboard('leader-canvas');
   const tradeFeed = new TradeFeed('trade-feed');
+  const agentDetail = new AgentDetail('agent-detail');
 
   const btnStart = document.getElementById('btn-start');
   const btnStop = document.getElementById('btn-stop');
@@ -13,45 +13,69 @@
   const stTick = document.getElementById('st-tick');
   const stSim = document.getElementById('st-sim');
 
+  // Load town map
+  townMap.init();
+
   // Load persona definitions
   fetch('/api/personas')
     .then(r => r.json())
     .then(defs => {
+      agentDetail.setDefs(defs);
+      const personaGrid = new PersonaGrid('persona-canvas'); // unused, kept for compat
       personaGrid.setDefs(defs);
       const colors = {};
       defs.forEach(d => { colors[d.id] = d.color; });
       leaderboard.setColors(colors);
-      personaGrid.render();
+      // Push colors to town map agents too
+      defs.forEach(d => {
+        if (!townMap.agents[d.id]) {
+          townMap.agents[d.id] = {};
+        }
+        townMap.agents[d.id].color = d.color;
+      });
     });
 
-  // WebSocket event handlers
+  // Click agent on map -> show detail
+  townMap.onSelectAgent = (agentId) => {
+    agentDetail.show(agentId);
+  };
+
+  // WebSocket: tick
   ws.on('tick', (data) => {
-    // Update persona grid
     if (data.personas) {
-      personaGrid.update(data.personas);
+      townMap.updateAgentStates(data.personas);
+      agentDetail.updateStates(data.personas);
       leaderboard.update(data.personas);
+      // Refresh detail if currently showing
+      if (agentDetail.currentId) {
+        agentDetail.render();
+      }
     }
 
-    // Update stock chart
+    if (data.conversations) {
+      townMap.updateConversations(data.conversations);
+    }
+
     if (data.prices) {
       stockChart.addTick(data.prices, data.tick);
     }
 
-    // Update trade feed
     if (data.trades) {
       tradeFeed.append(data.trades);
     }
 
-    // Update sentiment bar
     if (data.sentiment !== undefined) {
       const pct = ((data.sentiment + 1) / 2) * 100;
       document.getElementById('sentiment-fill').style.width = pct + '%';
     }
 
-    // Update status
+    // Render town map with all data
+    townMap.renderFrame();
+
     stTick.textContent = 'TICK ' + data.tick;
   });
 
+  // WebSocket: sim state
   ws.on('sim_state', (data) => {
     const running = data.running;
     btnStart.disabled = running;
@@ -60,12 +84,13 @@
     stSim.className = running ? 'running' : 'stopped';
   });
 
+  // WebSocket: connection
   ws.on('connection', (connected) => {
     stStatus.textContent = connected ? '● CONNECTED' : '● DISCONNECTED';
     stStatus.className = connected ? 'connected' : 'disconnected';
   });
 
-  // Button handlers
+  // Buttons
   btnStart.addEventListener('click', () => ws.send('start'));
   btnStop.addEventListener('click', () => ws.send('stop'));
   btnReset.addEventListener('click', () => ws.send('reset'));

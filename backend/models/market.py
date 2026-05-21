@@ -19,6 +19,13 @@ class PersonaSnapshot:
     pnl: float
     positions: int
     mood: str  # "confident", "worried", "excited", "calm", "panicked"
+    # New fields for Smallville integration
+    tile_x: int = 0
+    tile_y: int = 0
+    location: str = "home"
+    is_moving: bool = False
+    recent_thoughts: list[str] = field(default_factory=list)
+    backstory: str = ""
 
 
 @dataclass
@@ -47,6 +54,13 @@ class TradeRecord:
 
 
 @dataclass
+class ConversationRecord:
+    participants: list[str]
+    location: str
+    lines: list[dict]  # [{speaker: str, content: str}]
+
+
+@dataclass
 class SimulationFrame:
     tick: int
     prices: dict[str, float]
@@ -54,3 +68,4 @@ class SimulationFrame:
     personas: list[PersonaSnapshot]
     trades: list[TradeRecord]
     sentiment: float
+    conversations: list[ConversationRecord] = field(default_factory=list)

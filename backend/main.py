@@ -10,6 +10,7 @@ from backend.ws_manager import ConnectionManager
 from backend.engine.simulation import SimulationLoop
 from backend.mbti.personas import PERSONA_DEFINITIONS
 from backend.config import SYMBOLS
+from backend.models.town import TOWN_MAP, LOCATIONS, TILE_NAMES, HOME_ASSIGNMENTS
 
 sim: SimulationLoop | None = None
 ws_manager = ConnectionManager()
@@ -98,6 +99,29 @@ async def get_market():
         return {"prices": {}, "changes": {}}
     prices, changes = await sim.market.get_prices()
     return {"prices": prices, "changes": changes}
+
+
+@app.get("/api/town")
+async def get_town():
+    """Return town map, locations, and home assignments for frontend rendering."""
+    return {
+        "map": TOWN_MAP,
+        "tileNames": TILE_NAMES,
+        "locations": [
+            {
+                "id": loc.id,
+                "name": loc.name,
+                "tileX": loc.tile_x,
+                "tileY": loc.tile_y,
+                "width": loc.width,
+                "height": loc.height,
+                "color": loc.color,
+                "icon": loc.icon,
+            }
+            for loc in LOCATIONS.values()
+        ],
+        "homeAssignments": HOME_ASSIGNMENTS,
+    }
 
 
 @app.websocket("/ws")

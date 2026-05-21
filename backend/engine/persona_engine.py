@@ -1,12 +1,18 @@
 import random
 from backend.models.portfolio import PersonaState, Holding, TradeIntent
 from backend.mbti.types import TradingParams
+from backend.engine.memory_system import AgentMemory
 from backend.config import BUY_THRESHOLD, SELL_THRESHOLD, SYMBOLS
 
 
 class PersonaDecisionEngine:
     def __init__(self):
         self._signal_memory: dict[str, dict[str, list[float]]] = {}
+        # Track per-agent memories
+        self.memories: dict[str, AgentMemory] = {}
+
+    def register_memory(self, agent_id: str, memory: AgentMemory):
+        self.memories[agent_id] = memory
 
     def decide(
         self,
@@ -23,13 +29,17 @@ class PersonaDecisionEngine:
         persona.last_decision_tick = tick
         intents: list[TradeIntent] = []
 
-        # Compute aggregate herding signal from other personas' trade direction bias
+        memory = self.memories.get(persona.persona_id)
+        memory_sentiment = memory.get_sentiment() if memory else 0.0
+
+        # Compute aggregate herding signal
         herding_signal = self._compute_herding(all_states, persona.persona_id)
 
-        # Panic check
+        # Panic check — also considers memory sentiment
         portfolio_val = persona.portfolio_value(prices)
         pnl_pct = (portfolio_val - 10000) / 10000
-        if pnl_pct < params.panic_threshold:
+        effective_panic = params.panic_threshold * (1 - 0.3 * memory_sentiment)  # Positive sentiment dulls panic
+        if pnl_pct < effective_panic:
             for h in persona.holdings.values():
                 if h.shares > 0:
                     intents.append(TradeIntent(
@@ -41,22 +51,36 @@ class PersonaDecisionEngine:
                         reason="panic_sell",
                         timestamp=tick,
                     ))
+                    if memory:
+                        memory.observe(
+                            f"Panic sold {h.symbol} after {pnl_pct:.1%} drawdown",
+                            "reflection", 0.9, tick,
+                        )
             return intents
 
         # Process each symbol
         for symbol in SYMBOLS:
             price = prices.get(symbol, 0)
+            change = changes.get(symbol, 0)
             if price <= 0:
                 continue
 
             momentum = self._compute_momentum(symbol, price)
             volatility = self._compute_volatility(symbol, price)
 
-            # Weighted composite score
+            # Weighted composite score — now includes memory sentiment
             contrarian_adj = momentum * (1 - params.contrarianism) - momentum * params.contrarianism
             tech_signal = contrarian_adj * 0.6 + (1 - volatility / max(price * 0.1, 0.01)) * 0.4
-            social_signal = herding_signal * params.herding_weight
+            social_signal = (herding_signal + memory_sentiment) / 2 * params.herding_weight
             composite = params.tech_weight * tech_signal + (1 - params.tech_weight) * social_signal
+
+            # Price change observation
+            if memory and abs(change) > 0.005:
+                direction = "up" if change > 0 else "down"
+                memory.observe(
+                    f"{symbol} went {direction} {abs(change):.1%} to ${price:.2f}",
+                    "price", min(abs(change) * 20, 1.0), tick,
+                )
 
             # Add randomness scaled by volatility tolerance
             noise = random.uniform(-0.15, 0.15) * (1 - params.volatility_tolerance)
@@ -77,6 +101,11 @@ class PersonaDecisionEngine:
                         reason="profit_take",
                         timestamp=tick,
                     ))
+                    if memory:
+                        memory.observe(
+                            f"Took profit on {symbol} at {gain_pct:.1%} gain",
+                            "reflection", 0.7, tick,
+                        )
                     continue
 
             # Buy / Sell decision
@@ -84,15 +113,21 @@ class PersonaDecisionEngine:
             shares = max(1, int(trade_cash / price))
 
             if composite > BUY_THRESHOLD and persona.cash >= shares * price:
+                reason = "trend_follow" if momentum > 0 else "contrarian_buy"
                 intents.append(TradeIntent(
                     persona_id=persona.persona_id,
                     symbol=symbol,
-                    direction="BUY" if composite > 0 else "SELL",
+                    direction="BUY",
                     shares=shares,
-                    limit_price=price * (1.02 if composite > 0 else 0.98),
-                    reason="trend_follow" if composite > 0 else "contrarian",
+                    limit_price=price * 1.02,
+                    reason=reason,
                     timestamp=tick,
                 ))
+                if memory:
+                    memory.observe(
+                        f"Bought {shares} {symbol} — {reason}",
+                        "reflection", 0.6, tick,
+                    )
             elif composite < SELL_THRESHOLD and holding and holding.shares > 0:
                 sell_shares = max(1, int(holding.shares * abs(composite)))
                 intents.append(TradeIntent(
@@ -104,6 +139,11 @@ class PersonaDecisionEngine:
                     reason="contrarian",
                     timestamp=tick,
                 ))
+                if memory:
+                    memory.observe(
+                        f"Sold {min(sell_shares, holding.shares)} {symbol} — contrarian signal",
+                        "reflection", 0.6, tick,
+                    )
 
         return intents
 

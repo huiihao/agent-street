@@ -40,6 +40,12 @@ class ConnectionManager:
                         "pnl": p.pnl,
                         "positions": p.positions,
                         "mood": p.mood,
+                        "tileX": p.tile_x,
+                        "tileY": p.tile_y,
+                        "location": p.location,
+                        "isMoving": p.is_moving,
+                        "thoughts": p.recent_thoughts,
+                        "backstory": p.backstory,
                     }
                     for p in frame.personas
                 ],
@@ -55,6 +61,14 @@ class ConnectionManager:
                         "counterparty": t.counterparty,
                     }
                     for t in frame.trades
+                ],
+                "conversations": [
+                    {
+                        "participants": c.participants,
+                        "location": c.location,
+                        "lines": c.lines,
+                    }
+                    for c in frame.conversations
                 ],
                 "sentiment": frame.sentiment,
             },
