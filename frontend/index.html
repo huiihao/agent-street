@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mimic Stock Market</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="top-bar">
+    <h1>MIMIC STOCK MARKET</h1>
+    <div id="controls">
+      <button id="btn-start" class="pixel-btn">START</button>
+      <button id="btn-stop" class="pixel-btn" disabled>STOP</button>
+      <button id="btn-reset" class="pixel-btn">RESET</button>
+    </div>
+  </header>
+
+  <main id="main-grid">
+    <section id="persona-panel">
+      <h2 class="panel-title">PERSONAS</h2>
+      <canvas id="persona-canvas" width="320" height="480"></canvas>
+    </section>
+
+    <section id="center-panel">
+      <div id="chart-area">
+        <h2 class="panel-title">STOCK CHART</h2>
+        <canvas id="chart-canvas" width="560" height="280"></canvas>
+      </div>
+      <div id="sentiment-bar-wrap">
+        <span class="label">SENTIMENT</span>
+        <div id="sentiment-track">
+          <div id="sentiment-fill"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="leader-panel">
+      <h2 class="panel-title">LEADERBOARD</h2>
+      <canvas id="leader-canvas" width="200" height="300"></canvas>
+    </section>
+  </main>
+
+  <section id="trade-feed-panel">
+    <h2 class="panel-title">TRADE FEED</h2>
+    <div id="trade-feed"></div>
+  </section>
+
+  <footer id="status-bar">
+    <span id="st-tick">TICK 0</span>
+    <span id="st-status">● DISCONNECTED</span>
+    <span id="st-sim">SIM: STOPPED</span>
+  </footer>
+</div>
+
+<script src="js/rendering/pixel_art.js"></script>
+<script src="js/ws_client.js"></script>
+<script src="js/canvas/stock_chart.js"></script>
+<script src="js/canvas/persona_grid.js"></script>
+<script src="js/canvas/leaderboard.js"></script>
+<script src="js/canvas/trade_feed.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
