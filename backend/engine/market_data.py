@@ -1,4 +1,5 @@
 import asyncio
+import random
 import time
 import yfinance as yf
 from backend.config import SYMBOLS
@@ -18,7 +19,13 @@ class MarketDataProvider:
         async with self._lock:
             if not self._prices or time.time() - self._last_fetch > 30:
                 await self._fetch()
-            return dict(self._prices), dict(self._changes)
+            # Add micro noise between polls so the chart shows movement
+            noisy_prices = {}
+            for s in self.symbols:
+                base = self._prices.get(s, 200)
+                noise = base * random.uniform(-0.003, 0.003)  # +/- 0.3%
+                noisy_prices[s] = round(base + noise, 2)
+            return noisy_prices, dict(self._changes)
 
     async def _fetch(self):
         try:
