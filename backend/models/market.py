@@ -70,3 +70,5 @@ class SimulationFrame:
     trades: list[TradeRecord]
     sentiment: float
     conversations: list[ConversationRecord] = field(default_factory=list)
+    observer_reports: list[dict] = field(default_factory=list)
+    # [{observer_id, title, content, confidence, tick}]

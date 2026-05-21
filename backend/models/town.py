@@ -70,6 +70,16 @@ LOCATIONS: dict[str, Location] = {
     "library": Location("library", "Data Library", 15, 6, 3, 2, "#8BA0B5", "📚"),
     "square": Location("square", "Town Square", 9, 12, 3, 3, "#A0A090", "🌳"),
     "park": Location("park", "Willow Park", 9, 9, 2, 2, "#6BA06B", "🌿"),
+    # Observer locations
+    "observatory": Location("observatory", "Observatory", 17, 10, 2, 2, "#3A3A5A", "🔭"),
+    "math_tower":  Location("math_tower", "Math Tower", 18, 2, 2, 2, "#4A4A6A", "📐"),
+    "fortune_tent": Location("fortune_tent", "Fortune Tent", 1, 11, 2, 2, "#6A3A6A", "🔮"),
+}
+
+OBSERVER_HOMES: dict[str, str] = {
+    "physicist": "observatory",
+    "mathematician": "math_tower",
+    "mystic": "fortune_tent",
 }
 
 HOME_ASSIGNMENTS: dict[str, str] = {

@@ -5,7 +5,7 @@ from backend.models.market import (
     SimulationFrame, PersonaSnapshot, TradeRecord, ConversationRecord,
 )
 from backend.models.town import (
-    LOCATIONS, HOME_ASSIGNMENTS, get_adjacent_agents,
+    LOCATIONS, HOME_ASSIGNMENTS, OBSERVER_HOMES, get_adjacent_agents,
 )
 from backend.mbti.personas import PERSONA_DEFINITIONS
 from backend.mbti.types import TraitProfile
@@ -15,6 +15,7 @@ from backend.engine.matching_engine import MatchingEngine
 from backend.engine.memory_system import AgentMemory
 from backend.engine.daily_routine import DailyRoutine
 from backend.engine.conversation import ConversationSystem
+from backend.engine.observer_engine import ObserverEngine
 
 
 class SimulationLoop:
@@ -26,6 +27,7 @@ class SimulationLoop:
         self.house_holdings: dict[str, int] = {}
         self.market = HistoricalDataProvider(SYMBOLS)
         self.decision_engine = PersonaDecisionEngine()
+        self.observer_engine = ObserverEngine()
         self.matching_engine = MatchingEngine(strict=False)
         # Generative Agents systems
         self.memories: dict[str, AgentMemory] = {}
@@ -173,7 +175,24 @@ class SimulationLoop:
             for c in active_conversations
         ]
 
+        # 7. Observer reports
         sentiment = self._compute_sentiment(prices)
+        report_records = []
+        for obs_id in ("physicist", "mathematician", "mystic"):
+            report = self.observer_engine.observe(
+                obs_id, self.tick, prices, changes,
+                self.personas, self.memories,
+                trades, sentiment,
+            )
+            if report:
+                report_records.append({
+                    "observer_id": report.observer_id,
+                    "title": report.title,
+                    "content": report.content,
+                    "confidence": report.confidence,
+                    "tick": report.tick,
+                })
+
         frame = SimulationFrame(
             tick=self.tick,
             prices=prices,
@@ -182,6 +201,7 @@ class SimulationLoop:
             trades=trade_records,
             sentiment=sentiment,
             conversations=conv_records,
+            observer_reports=report_records,
         )
 
         if self._on_frame:
@@ -228,6 +248,39 @@ class SimulationLoop:
                 is_moving=routine.is_moving() if routine else False,
                 recent_thoughts=memory.recent_thoughts(5) if memory else [],
                 backstory=defn.get("backstory", ""),
+            ))
+
+        # Add 3 observer agents at fixed locations
+        observer_defs = {
+            "physicist": {
+                "name": "Physicist", "color": "#7B9ECF",
+                "backstory": "Statistical physicist studying phase transitions in agent-market systems. Specializes in complex systems and critical phenomena.",
+            },
+            "mathematician": {
+                "name": "Mathematician", "color": "#9E7BCF",
+                "backstory": "Graph theorist applying combinatorial optimization to agent interaction networks.",
+            },
+            "mystic": {
+                "name": "Mystic", "color": "#CF7BAE",
+                "backstory": "Reads tea leaves, casts I Ching hexagrams, and somehow gets the market right more often than expected.",
+            },
+        }
+        for obs_id, defn in observer_defs.items():
+            home_id = OBSERVER_HOMES.get(obs_id)
+            loc = LOCATIONS.get(home_id) if home_id else None
+            tx = loc.tile_x if loc else 0
+            ty = loc.tile_y if loc else 0
+            snaps.append(PersonaSnapshot(
+                persona_id=obs_id,
+                name=defn["name"],
+                color=defn["color"],
+                cash=0, pnl=0, positions=0,
+                mood="calm",
+                tile_x=tx, tile_y=ty,
+                location=loc.name if loc else "Observatory",
+                is_moving=False,
+                recent_thoughts=[],
+                backstory=defn["backstory"],
             ))
         return snaps
 

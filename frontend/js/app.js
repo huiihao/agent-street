@@ -5,6 +5,7 @@
   const leaderboard = new Leaderboard('leader-canvas');
   const tradeFeed = new TradeFeed('trade-feed');
   const agentDetail = new AgentDetail('agent-detail');
+  const observerReports = new ObserverReports('observer-reports');
 
   const btnStart = document.getElementById('btn-start');
   const btnStop = document.getElementById('btn-stop');
@@ -49,6 +50,9 @@
     }
     if (data.prices) {
       stockChart.addTick(data.prices, data.tick);
+    }
+    if (data.observerReports) {
+      observerReports.append(data.observerReports);
     }
     if (data.trades) {
       tradeFeed.append(data.trades);

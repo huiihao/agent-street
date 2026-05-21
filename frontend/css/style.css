@@ -211,6 +211,58 @@ body {
   margin: 2px 0;
 }
 
+/* Observer reports */
+#observer-panel { margin-bottom: 6px; }
+
+#observer-reports {
+  background: var(--panel-bg);
+  border: 2px solid var(--border);
+  padding: 4px 8px;
+  min-height: 40px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.obs-placeholder {
+  color: #555;
+  font-size: 7px;
+  padding: 12px;
+  text-align: center;
+}
+
+.obs-report {
+  padding: 6px 8px;
+  margin: 4px 0;
+  background: #1a1a30;
+  font-size: 6px;
+  line-height: 1.6;
+}
+
+.obs-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.obs-icon { font-size: 10px; }
+.obs-name { font-size: 7px; font-weight: bold; }
+.obs-tick { font-size: 6px; color: #555; margin-left: auto; }
+.obs-confidence { font-size: 5px; }
+
+.obs-title {
+  font-size: 7px;
+  color: var(--gold);
+  margin: 2px 0;
+  font-style: italic;
+}
+
+.obs-content {
+  font-size: 5px;
+  color: #bbb;
+  line-height: 1.5;
+}
+
 /* Trade feed */
 #trade-feed-panel { margin-bottom: 6px; }
 

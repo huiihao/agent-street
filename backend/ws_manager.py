@@ -71,6 +71,16 @@ class ConnectionManager:
                     }
                     for c in frame.conversations
                 ],
+                "observerReports": [
+                    {
+                        "observerId": r["observer_id"],
+                        "title": r["title"],
+                        "content": r["content"],
+                        "confidence": r["confidence"],
+                        "tick": r["tick"],
+                    }
+                    for r in frame.observer_reports
+                ],
                 "sentiment": frame.sentiment,
             },
         }
