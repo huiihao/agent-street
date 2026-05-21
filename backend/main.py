@@ -65,6 +65,8 @@ async def get_status():
         "tick": sim.tick,
         "personas": len(sim.personas),
         "symbols": SYMBOLS,
+        "progress": sim.market.progress() if sim.market else 0,
+        "totalTicks": sim.market.estimate_total_ticks() if sim.market else 0,
     }
 
 

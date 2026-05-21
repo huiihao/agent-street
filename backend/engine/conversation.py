@@ -1,6 +1,8 @@
+import asyncio
 import random
 from dataclasses import dataclass, field
 from backend.mbti.types import TraitProfile
+from backend.mbti.personas import PERSONA_DEFINITIONS
 from backend.models.town import get_adjacent_agents
 
 
@@ -103,30 +105,64 @@ class ConversationSystem:
         is_thinking = traits.thinking > 0.5
         is_contrarian = (1 - traits.extraversion) > 0.5  # introverts tend contrarian
 
-        # Speaker 1 (initiator)
-        greeting = random.choice(GREETINGS).format(symbol=symbol, sentiment_word=sentiment_word)
-
-        # Determine initiator's sentiment bias
         change_val = changes.get(symbol, 0)
         if is_contrarian:
             change_val = -change_val
-        initiator_bias = "bullish" if change_val > 0 else "bearish" if change_val < -0.005 else "neutral"
-        initiator_sentiment = 0.3 if initiator_bias == "bullish" else -0.3 if initiator_bias == "bearish" else 0.0
+        price = prices.get(symbol, 200)
 
-        turns = [ConversationTurn(agent_id, greeting, initiator_sentiment, tick)]
+        # Try LLM for richer conversation
+        llm_lines = None
+        try:
+            from backend.engine.llm_client import llm_available, generate_conversation_line
+            if llm_available():
+                llm_lines = []
+                for speaker_id in participants:
+                    defn = PERSONA_DEFINITIONS.get(speaker_id, {})
+                    name = defn.get("name", speaker_id)
+                    traits_desc = f"{'extravert' if defn.get('traits') and defn['traits'].extraversion > 0.5 else 'introvert'}, {'analytical' if defn.get('traits') and defn['traits'].thinking > 0.5 else 'emotional'}"
+                    line = None
+                    try:
+                        line = asyncio.get_event_loop().run_until_complete(
+                            generate_conversation_line(
+                                speaker_id, name, traits_desc,
+                                participants[0] if speaker_id != participants[0] else participants[-1],
+                                symbol, price, change_val,
+                                [],
+                            )
+                        )
+                    except Exception:
+                        pass
+                    if line:
+                        llm_lines.append((speaker_id, line))
+                    else:
+                        llm_lines = None
+                        break
+        except Exception:
+            pass
 
-        # Partner responses
-        for partner_id in partners:
-            if initiator_bias == "bullish":
-                resp = random.choice(RESPONSES_BULLISH).format(symbol=symbol)
-                sent = 0.2
-            elif initiator_bias == "bearish":
-                resp = random.choice(RESPONSES_BEARISH).format(symbol=symbol)
-                sent = -0.2
-            else:
-                resp = random.choice(RESPONSES_NEUTRAL).format(symbol=symbol)
-                sent = 0.0
-            turns.append(ConversationTurn(partner_id, resp, sent, tick))
+        if llm_lines:
+            turns = [
+                ConversationTurn(sid, line, 0.25 if "bull" in line.lower() else -0.25 if "bear" in line.lower() else 0.0, tick)
+                for sid, line in llm_lines
+            ]
+        else:
+            # Fall back to rule-based
+            greeting = random.choice(GREETINGS).format(symbol=symbol, sentiment_word=sentiment_word)
+            initiator_bias = "bullish" if change_val > 0 else "bearish" if change_val < -0.005 else "neutral"
+            initiator_sentiment = 0.3 if initiator_bias == "bullish" else -0.3 if initiator_bias == "bearish" else 0.0
+
+            turns = [ConversationTurn(agent_id, greeting, initiator_sentiment, tick)]
+            for partner_id in partners:
+                if initiator_bias == "bullish":
+                    resp = random.choice(RESPONSES_BULLISH).format(symbol=symbol)
+                    sent = 0.2
+                elif initiator_bias == "bearish":
+                    resp = random.choice(RESPONSES_BEARISH).format(symbol=symbol)
+                    sent = -0.2
+                else:
+                    resp = random.choice(RESPONSES_NEUTRAL).format(symbol=symbol)
+                    sent = 0.0
+                turns.append(ConversationTurn(partner_id, resp, sent, tick))
 
         conv = Conversation(
             participants=participants,

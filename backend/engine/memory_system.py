@@ -1,7 +1,9 @@
+import asyncio
 import random
 import time
 from dataclasses import dataclass, field
 from backend.mbti.types import TraitProfile
+from backend.mbti.personas import PERSONA_DEFINITIONS
 
 
 @dataclass
@@ -61,29 +63,45 @@ class AgentMemory:
         for _, obs in recent_unreflected:
             grouped.setdefault(obs.category, []).append(obs)
 
-        # Price-based reflection
-        price_obs = grouped.get("price", [])
-        if len(price_obs) >= 3:
-            content = self._generate_price_reflection(price_obs, prices, changes)
-            ref = Reflection(
-                content=content,
-                confidence=0.3 + 0.4 * self.traits.thinking,
-                source_observations=[i for i, _ in recent_unreflected if self.observations[i].category == "price"],
-                tick=tick,
-            )
-            new_reflections.append(ref)
+        # Try LLM first for a richer reflection
+        llm_content = None
+        try:
+            from backend.engine.llm_client import llm_available, generate_reflection
+            if llm_available():
+                defn = PERSONA_DEFINITIONS.get(self.agent_id, {})
+                obs_texts = [o.content for o in recent_unreflected]
+                llm_content = asyncio.get_event_loop().run_until_complete(
+                    generate_reflection(
+                        self.agent_id, defn.get("name", self.agent_id),
+                        defn.get("backstory", ""), defn.get("motto", ""),
+                        obs_texts, prices, tick,
+                    )
+                )
+        except Exception:
+            pass
 
-        # Conversation-based reflection
-        conv_obs = grouped.get("conversation", [])
-        if len(conv_obs) >= 2:
-            content = self._generate_conversation_reflection(conv_obs)
-            ref = Reflection(
-                content=content,
-                confidence=0.2 + 0.3 * (1 - self.traits.thinking),
-                source_observations=[i for i, _ in recent_unreflected if self.observations[i].category == "conversation"],
-                tick=tick,
-            )
-            new_reflections.append(ref)
+        if llm_content:
+            content = llm_content
+            confidence = 0.6 + 0.2 * self.traits.thinking
+        else:
+            # Fall back to rule-based
+            price_obs = grouped.get("price", [])
+            conv_obs = grouped.get("conversation", [])
+            if len(price_obs) >= 3:
+                content = self._generate_price_reflection(price_obs, prices, changes)
+            elif len(conv_obs) >= 2:
+                content = self._generate_conversation_reflection(conv_obs)
+            else:
+                content = "Hmm, nothing notable happening."
+            confidence = 0.3 + 0.3 * self.traits.thinking
+
+        ref = Reflection(
+            content=content,
+            confidence=confidence,
+            source_observations=[i for i, _ in recent_unreflected],
+            tick=tick,
+        )
+        new_reflections.append(ref)
 
         for r in new_reflections:
             self.reflections.append(r)

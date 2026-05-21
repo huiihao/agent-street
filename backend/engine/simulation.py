@@ -9,7 +9,7 @@ from backend.models.town import (
 )
 from backend.mbti.personas import PERSONA_DEFINITIONS
 from backend.mbti.types import TraitProfile
-from backend.engine.market_data import MarketDataProvider
+from backend.engine.market_data import HistoricalDataProvider
 from backend.engine.persona_engine import PersonaDecisionEngine
 from backend.engine.matching_engine import MatchingEngine
 from backend.engine.memory_system import AgentMemory
@@ -24,7 +24,7 @@ class SimulationLoop:
         self.personas: dict[str, PersonaState] = {}
         self.house_cash = 0.0
         self.house_holdings: dict[str, int] = {}
-        self.market = MarketDataProvider(SYMBOLS)
+        self.market = HistoricalDataProvider(SYMBOLS)
         self.decision_engine = PersonaDecisionEngine()
         self.matching_engine = MatchingEngine(strict=False)
         # Generative Agents systems

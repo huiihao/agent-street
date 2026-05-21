@@ -1,65 +1,102 @@
-import asyncio
 import random
 import time
+from datetime import datetime, timedelta
 import yfinance as yf
 from backend.config import SYMBOLS
 
 
-class MarketDataProvider:
-    def __init__(self, symbols: list[str] | None = None):
+class HistoricalDataProvider:
+    """Loads intraday historical data and replays it bar-by-bar as simulation ticks."""
+
+    def __init__(
+        self,
+        symbols: list[str] | None = None,
+        days_back: int = 3,
+        interval: str = "5m",
+    ):
         self.symbols = symbols or SYMBOLS
-        self._prices: dict[str, float] = {}
-        self._changes: dict[str, float] = {}
+        self.days_back = days_back
+        self.interval = interval
+        self._bars: dict[str, list[dict]] = {}     # symbol -> [{time, open, high, low, close, volume}]
+        self._bar_index: int = 0
+        self._total_bars: int = 0
+        self._current_prices: dict[str, float] = {}
+        self._current_changes: dict[str, float] = {}
         self._prev_close: dict[str, float] = {}
-        self._price_history: dict[str, list[float]] = {s: [] for s in self.symbols}
-        self._last_fetch = 0.0
-        self._lock = asyncio.Lock()
-
-    async def get_prices(self) -> tuple[dict[str, float], dict[str, float]]:
-        async with self._lock:
-            if not self._prices or time.time() - self._last_fetch > 30:
-                await self._fetch()
-            # Add micro noise between polls so the chart shows movement
-            noisy_prices = {}
-            for s in self.symbols:
-                base = self._prices.get(s, 200)
-                noise = base * random.uniform(-0.003, 0.003)  # +/- 0.3%
-                noisy_prices[s] = round(base + noise, 2)
-            return noisy_prices, dict(self._changes)
-
-    async def _fetch(self):
-        try:
-            tickers = yf.Tickers(" ".join(self.symbols))
-            for s in self.symbols:
-                try:
-                    t = tickers.tickers.get(s)
-                    if t is None:
-                        continue
-                    info = t.fast_info
-                    price = info.get("lastPrice", 0) or info.get("regularMarketPrice", 0)
-                    prev = info.get("regularMarketPreviousClose", 0) or info.get("previousClose", 0)
-                    if price and price > 0:
-                        self._prices[s] = float(price)
-                        self._prev_close[s] = float(prev)
-                        if prev and prev > 0:
-                            self._changes[s] = (self._prices[s] - prev) / prev
-                        else:
-                            self._changes[s] = 0.0
-                        self._price_history[s].append(self._prices[s])
-                        if len(self._price_history[s]) > 300:
-                            self._price_history[s] = self._price_history[s][-300:]
-                except Exception as e:
-                    print(f"MarketData: error for {s} — {e}")
-                    continue
-        except Exception as e:
-            print(f"MarketData: fetch error — {e}")
-        self._last_fetch = time.time()
+        self._loaded = False
 
     async def fetch_init(self):
-        await self._fetch()
-        if not self._prices:
-            self._prices = {s: 180.0 + i * 20 for i, s in enumerate(self.symbols)}
-            self._changes = {s: 0.0 for s in self.symbols}
+        await self._load_history()
+        if self._total_bars > 0:
+            self._advance_bar()
+            self._loaded = True
 
-    def get_history(self, symbol: str) -> list[float]:
-        return self._price_history.get(symbol, [])
+    async def _load_history(self):
+        end = datetime.now()
+        start = end - timedelta(days=self.days_back)
+
+        for symbol in self.symbols:
+            try:
+                ticker = yf.Ticker(symbol)
+                df = ticker.history(start=start, end=end, interval=self.interval)
+                if df.empty:
+                    continue
+                bars = []
+                for idx, row in df.iterrows():
+                    bars.append({
+                        "time": idx,
+                        "open": float(row["Open"]),
+                        "high": float(row["High"]),
+                        "low": float(row["Low"]),
+                        "close": float(row["Close"]),
+                        "volume": int(row["Volume"]),
+                    })
+                self._bars[symbol] = bars
+                if self._prev_close:
+                    # Use the first bar's close as prev_close for change calc
+                    pass
+            except Exception as e:
+                print(f"History load error for {symbol}: {e}")
+
+        # Align all symbols to the same bar count
+        if self._bars:
+            self._total_bars = max(len(b) for b in self._bars.values())
+        else:
+            self._total_bars = 0
+
+    def _advance_bar(self):
+        idx = self._bar_index % max(self._total_bars, 1)
+        for symbol in self.symbols:
+            bars = self._bars.get(symbol, [])
+            if bars:
+                bar = bars[idx % len(bars)]
+                self._current_prices[symbol] = bar["close"]
+                prev = bars[(idx - 1) % len(bars)]["close"] if idx > 0 else bar["open"]
+                self._prev_close[symbol] = prev
+                self._current_changes[symbol] = (bar["close"] - prev) / prev if prev > 0 else 0.0
+            else:
+                # Symbol has no data — carry over last price or seed
+                if symbol not in self._current_prices:
+                    self._current_prices[symbol] = 200.0
+                    self._current_changes[symbol] = 0.0
+
+        self._bar_index += 1
+
+    async def get_prices(self) -> tuple[dict[str, float], dict[str, float]]:
+        """Advance to the next bar and return prices. Called once per simulation tick."""
+        if not self._loaded:
+            await self.fetch_init()
+        self._advance_bar()
+        return dict(self._current_prices), dict(self._current_changes)
+
+    def progress(self) -> float:
+        if self._total_bars == 0:
+            return 1.0
+        return min(1.0, self._bar_index / self._total_bars)
+
+    def estimate_total_ticks(self) -> int:
+        return self._total_bars
+
+    @property
+    def current_prices(self) -> dict[str, float]:
+        return dict(self._current_prices)
