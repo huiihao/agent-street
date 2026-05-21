@@ -101,7 +101,8 @@ class AgentMemory:
         total = up_count + down_count or 1
         bullish_pct = up_count / total
 
-        if self.traits.contrarianism > 0.6:
+        is_contrarian = (1 - self.traits.extraversion) > 0.5  # introverts tend contrarian
+        if is_contrarian:
             bullish_pct = 1 - bullish_pct
 
         if bullish_pct > 0.7:
