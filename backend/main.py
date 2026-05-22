@@ -135,10 +135,12 @@ async def websocket_endpoint(ws: WebSocket):
             msg = await ws.receive_text()
             data = json.loads(msg)
             action = data.get("action", "")
-            if action == "start" and sim and not sim.running:
-                await sim.start()
+            if action == "start" and sim:
+                if not sim.running:
+                    await sim.start()
             elif action == "stop" and sim:
                 sim.stop()
+                sim._loop_task = None
             elif action and action.startswith("speed:"):
                 if sim:
                     try:

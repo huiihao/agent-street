@@ -31,6 +31,7 @@ class SimulationLoop:
         self.observer_engine = ObserverEngine()
         self.influence_network = InfluenceNetwork()
         self._speed_multiplier = 1.0
+        self._loop_task: asyncio.Task | None = None
         self.matching_engine = MatchingEngine(strict=False)
         # Generative Agents systems
         self.memories: dict[str, AgentMemory] = {}
@@ -71,18 +72,22 @@ class SimulationLoop:
             for sym, price in prices.items():
                 memory.observe(f"Market open — {sym} at ${price:.2f}", "price", 0.5, 0)
         self.running = True
-        asyncio.create_task(self._loop())
+        self._loop_task = asyncio.create_task(self._loop())
 
     def set_speed(self, multiplier: float):
         self._speed_multiplier = max(0.1, min(50, multiplier))
 
     def stop(self):
         self.running = False
+        if self._loop_task and not self._loop_task.done():
+            self._loop_task.cancel()
 
     async def _loop(self):
         while self.running:
             try:
                 await self._do_tick()
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 print(f"Tick error: {e}")
             delay = TICK_INTERVAL_SEC / self._speed_multiplier
