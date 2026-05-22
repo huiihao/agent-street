@@ -64,6 +64,7 @@ class ConversationRecord:
 @dataclass
 class SimulationFrame:
     tick: int
+    world_time: str  # simulation clock e.g. "2026-05-20 14:35"
     prices: dict[str, float]
     changes: dict[str, float]  # symbol -> change_pct
     personas: list[PersonaSnapshot]
@@ -71,4 +72,3 @@ class SimulationFrame:
     sentiment: float
     conversations: list[ConversationRecord] = field(default_factory=list)
     observer_reports: list[dict] = field(default_factory=list)
-    # [{observer_id, title, content, confidence, tick}]

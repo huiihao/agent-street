@@ -28,6 +28,7 @@ class SimulationLoop:
         self.market = HistoricalDataProvider(SYMBOLS)
         self.decision_engine = PersonaDecisionEngine()
         self.observer_engine = ObserverEngine()
+        self._speed_multiplier = 1.0
         self.matching_engine = MatchingEngine(strict=False)
         # Generative Agents systems
         self.memories: dict[str, AgentMemory] = {}
@@ -70,6 +71,9 @@ class SimulationLoop:
         self.running = True
         asyncio.create_task(self._loop())
 
+    def set_speed(self, multiplier: float):
+        self._speed_multiplier = max(0.1, min(50, multiplier))
+
     def stop(self):
         self.running = False
 
@@ -79,7 +83,8 @@ class SimulationLoop:
                 await self._do_tick()
             except Exception as e:
                 print(f"Tick error: {e}")
-            await asyncio.sleep(TICK_INTERVAL_SEC)
+            delay = TICK_INTERVAL_SEC / self._speed_multiplier
+            await asyncio.sleep(delay)
 
     async def _do_tick(self):
         prices, changes = await self.market.get_prices()
@@ -160,7 +165,10 @@ class SimulationLoop:
             if persona:
                 persona.trade_history.append(t)
 
-        # 6. Build frame with town data
+        # 6. Current world time from the bar data
+        world_time = self._get_world_time()
+
+        # 7. Build frame with town data
         snapshots = self._build_snapshots(prices)
         trade_records = [
             TradeRecord.from_executed(t, PERSONA_DEFINITIONS.get(t.persona_id, {}).get("name", ""))
@@ -195,6 +203,7 @@ class SimulationLoop:
 
         frame = SimulationFrame(
             tick=self.tick,
+            world_time=world_time,
             prices=prices,
             changes=changes,
             personas=snapshots,
@@ -283,6 +292,19 @@ class SimulationLoop:
                 backstory=defn["backstory"],
             ))
         return snaps
+
+    def _get_world_time(self) -> str:
+        """Get the timestamp of the current bar for display as world time."""
+        for symbol in SYMBOLS:
+            bars = self.market._bars.get(symbol, [])
+            if bars:
+                idx = (self.market._bar_index - 1) % len(bars)
+                bar = bars[idx]
+                t = bar.get("time")
+                if hasattr(t, "strftime"):
+                    return t.strftime("%Y-%m-%d %H:%M")
+                return str(t)[:16]
+        return f"Tick {self.tick}"
 
     def _compute_sentiment(self, prices: dict[str, float]) -> float:
         pnls = [ps.pnl(INITIAL_CASH, prices) / INITIAL_CASH for ps in self.personas.values()]

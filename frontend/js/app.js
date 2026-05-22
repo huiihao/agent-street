@@ -13,6 +13,20 @@
   const stStatus = document.getElementById('st-status');
   const stTick = document.getElementById('st-tick');
   const stSim = document.getElementById('st-sim');
+  const stWorldTime = document.getElementById('st-world-time');
+  const stSpeed = document.getElementById('st-speed');
+
+  // Speed control: click to cycle 1x -> 2x -> 5x -> MAX -> 1x
+  const speeds = [1, 2, 5, 20];
+  let speedIdx = 0;
+  stSpeed.style.cursor = 'pointer';
+  stSpeed.title = 'Click to change simulation speed';
+  stSpeed.addEventListener('click', () => {
+    speedIdx = (speedIdx + 1) % speeds.length;
+    const s = speeds[speedIdx];
+    stSpeed.textContent = s >= 20 ? '⚡MAX' : '⚡' + s + 'x';
+    ws.send('speed:' + s);
+  });
 
   // Load town map and persona definitions
   townMap.init();
@@ -24,7 +38,6 @@
       const colors = {};
       defs.forEach(d => {
         colors[d.id] = d.color;
-        // Pre-seed town map agent colors from persona defs
         if (!townMap.agents[d.id]) townMap.agents[d.id] = {};
         townMap.agents[d.id].color = d.color;
       });
@@ -32,7 +45,6 @@
     })
     .catch(e => console.error('Failed to load persona defs:', e));
 
-  // Click agent -> detail panel
   townMap.onSelectAgent = (agentId) => {
     agentDetail.show(agentId);
   };
@@ -62,6 +74,11 @@
       document.getElementById('sentiment-fill').style.width = pct + '%';
     }
     townMap.renderFrame();
+
+    // Update world time and tick
+    if (data.worldTime) {
+      stWorldTime.textContent = '🕐 ' + data.worldTime;
+    }
     stTick.textContent = 'TICK ' + data.tick;
   });
 

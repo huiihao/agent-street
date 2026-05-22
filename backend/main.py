@@ -63,6 +63,7 @@ async def get_status():
     return {
         "running": sim.running,
         "tick": sim.tick,
+        "speed": sim._speed_multiplier if sim else 1,
         "personas": len(sim.personas),
         "symbols": SYMBOLS,
         "progress": sim.market.progress() if sim.market else 0,
@@ -138,6 +139,12 @@ async def websocket_endpoint(ws: WebSocket):
                 await sim.start()
             elif action == "stop" and sim:
                 sim.stop()
+            elif action and action.startswith("speed:"):
+                if sim:
+                    try:
+                        sim.set_speed(float(action.split(":")[1]))
+                    except ValueError:
+                        pass
             elif action == "reset" and sim:
                 sim.stop()
                 sim.init_personas()

@@ -30,6 +30,7 @@ class ConnectionManager:
             "type": "tick",
             "data": {
                 "tick": frame.tick,
+                "worldTime": frame.world_time,
                 "prices": frame.prices,
                 "changes": frame.changes,
                 "personas": [
