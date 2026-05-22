@@ -371,10 +371,14 @@ class TownMap {
       ctx.fillStyle = glow;
       ctx.fillRect(cx - 14, cy - 14, 28, 28);
 
-      // Pixel sprite (compact 10x12)
-      const sx = cx - 5;
-      const sy = cy - 6;
-      this._drawAgentSprite(ctx, sx, sy, a.mood || 'calm', a.color || '#888', id);
+      // Pixel sprite, 2x scale for visibility
+      const SPRITE_W = 10, SPRITE_H = 8, SCALE = 2;
+      const sx = cx - (SPRITE_W * SCALE) / 2;
+      const sy = cy - (SPRITE_H * SCALE) / 2 - 2;
+      // Background plate for contrast
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      ctx.fillRect(sx - 1, sy - 1, SPRITE_W * SCALE + 2, SPRITE_H * SCALE + 2);
+      this._drawAgentSprite(ctx, sx, sy, a.mood || 'calm', a.color || '#888', id, SCALE);
 
       // Highlight ring
       if (isHovered || isSelected) {
@@ -402,39 +406,49 @@ class TownMap {
     }
   }
 
-  _drawAgentSprite(ctx, x, y, mood, color, id) {
+  _drawAgentSprite(ctx, x, y, mood, color, id, scale = 2) {
     const p = this._makePal(color);
     const f = this._face(mood);
     const seed = this._seed(id);
 
     const sprite = [
       // row: pixels (0=transparent, 1=hair, 2=skin, 3=eye, 4=mouth, 5=body)
-      [0,0,1,1,1,1,1,1,0,0],  // hair
-      [0,1,1,1,1,1,1,1,1,0],  // hair
-      [0,2,2,2,2,2,2,2,2,0],  // forehead
-      [0,2,2,3,3,2,3,3,2,0],  // eyes
-      [0,2,2,2,4,2,2,4,2,0],  // nose/mouth
-      [0,2,2,2,2,2,2,2,2,0],  // chin
-      [0,5,5,5,5,5,5,5,5,0],  // body
-      [0,5,5,5,5,5,5,5,5,0],  // body
+      [0,0,1,1,1,1,1,1,0,0],
+      [0,1,1,1,1,1,1,1,1,0],
+      [0,2,2,2,2,2,2,2,2,0],
+      [0,2,2,3,3,2,3,3,2,0],
+      [0,2,2,2,4,2,2,4,2,0],
+      [0,2,2,2,2,2,2,2,2,0],
+      [0,5,5,5,5,5,5,5,5,0],
+      [0,5,5,5,5,5,5,5,5,0],
     ];
 
-    // Modulate hair by seed
-    if (seed % 3 === 0) { sprite[0][2] = 0; sprite[0][7] = 0; } // spiky
+    if (seed % 3 === 0) { sprite[0][2] = 0; sprite[0][7] = 0; }
 
     for (let r = 0; r < sprite.length; r++) {
       for (let c = 0; c < sprite[r].length; c++) {
         const v = sprite[r][c];
         let fill = null;
-        if (v === 1) fill = p.dark;
-        else if (v === 2) fill = p.skin;
-        else if (v === 3) fill = (f.eyes && c >= 3 && c <= 6 && (c === 3 || c === 6 || f.eyes[c - 3])) ? '#111' : p.skin;
-        else if (v === 4) fill = (f.mouth && f.mouth[c - 4]) ? '#111' : p.skin;
-        else if (v === 5) fill = p.mid;
+        if (v === 1) fill = p.light;       // hair: use light color for visibility
+        else if (v === 2) fill = p.skin;    // skin
+        else if (v === 3) {
+          // eyes
+          if (c === 3 && f.eyes[0]) fill = '#111';
+          else if (c === 4 && f.eyes[1]) fill = '#111';
+          else if (c === 5 && f.eyes[2]) fill = '#111';
+          else if (c === 6 && f.eyes[3]) fill = '#111';
+          else fill = p.skin;
+        }
+        else if (v === 4) {
+          // mouth
+          const mi = c - 4;
+          fill = (f.mouth && mi >= 0 && mi < f.mouth.length && f.mouth[mi]) ? '#111' : p.skin;
+        }
+        else if (v === 5) fill = p.mid;     // body
 
         if (fill) {
           ctx.fillStyle = fill;
-          ctx.fillRect(x + c, y + r, 1, 1);
+          ctx.fillRect(x + c * scale, y + r * scale, scale, scale);
         }
       }
     }
@@ -458,7 +472,7 @@ class TownMap {
     return {
       dark: `rgb(${Math.floor(r*0.35)},${Math.floor(g*0.35)},${Math.floor(b*0.35)})`,
       mid: hex,
-      light: `rgb(${Math.min(255,Math.floor(r*1.3))},${Math.min(255,Math.floor(g*1.3))},${Math.min(255,Math.floor(b*1.3))})`,
+      light: `rgb(${Math.min(255,r+80)},${Math.min(255,g+80)},${Math.min(255,b+80)})`,
       skin: '#F5D0A9',
     };
   }

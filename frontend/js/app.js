@@ -54,7 +54,10 @@
     if (data.personas) {
       townMap.updateAgentStates(data.personas);
       agentDetail.updateStates(data.personas);
-      leaderboard.update(data.personas);
+      const traders = (data.personas || []).filter(
+        p => !['physicist', 'mathematician', 'mystic'].includes(p.id)
+      );
+      leaderboard.update(traders);
       if (agentDetail.currentId) agentDetail.render();
     }
     if (data.conversations) {
