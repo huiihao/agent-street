@@ -70,6 +70,7 @@
       observerReports.append(data.observerReports);
     }
     if (data.trades) {
+      townMap.updateTrades(data.trades);
       tradeFeed.append(data.trades);
     }
     if (data.sentiment !== undefined) {

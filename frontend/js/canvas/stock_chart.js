@@ -3,32 +3,27 @@ class StockChart {
     this.canvas = document.getElementById(canvasId);
     this.ctx = this.canvas.getContext('2d');
     this.ctx.imageSmoothingEnabled = false;
-    this.series = {}; // symbol -> [{price, tick}]
-    this.basePrices = {}; // first price per symbol for % calc
-    this.maxPoints = 180;
-    this.margin = { top: 16, right: 55, bottom: 26, left: 48 };
+    this.series = {};
+    this.basePrices = {};
+    this.maxPoints = 150;
+    // Wide margins to prevent any text overflow
+    this.margin = { top: 14, right: 46, bottom: 18, left: 42 };
     this.symbolColors = {
-      AAPL: '#a0a0a0',
-      GOOGL: '#4285F4',
-      MSFT: '#34A853',
-      TSLA: '#EA4335',
-      AMZN: '#FF9900',
+      AAPL: '#a0a0a0', GOOGL: '#4285F4', MSFT: '#34A853',
+      TSLA: '#EA4335', AMZN: '#FF9900',
     };
     this.lastPrices = {};
+    this.lastTick = 0;
   }
 
   addTick(prices, tick) {
     for (const [sym, price] of Object.entries(prices)) {
-      if (!this.series[sym]) {
-        this.series[sym] = [];
-        this.basePrices[sym] = price;
-      }
+      if (!this.series[sym]) { this.series[sym] = []; this.basePrices[sym] = price; }
       this.series[sym].push({ price, tick });
-      if (this.series[sym].length > this.maxPoints) {
-        this.series[sym].shift();
-      }
+      if (this.series[sym].length > this.maxPoints) this.series[sym].shift();
       this.lastPrices[sym] = price;
     }
+    this.lastTick = tick;
     this.render();
   }
 
@@ -38,89 +33,97 @@ class StockChart {
     const h = this.canvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    const plotW = w - this.margin.left - this.margin.right;
-    const plotH = h - this.margin.top - this.margin.bottom;
+    const m = this.margin;
+    const pw = w - m.left - m.right;
+    const ph = h - m.top - m.bottom;
 
-    // Background grid
+    // Clipping region for plot area — nothing drawn outside
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(m.left - 1, m.top - 1, pw + 2, ph + 2);
+    ctx.clip();
+
+    // Grid lines
     ctx.strokeStyle = '#1a1a30';
     ctx.lineWidth = 1;
     for (let i = 0; i <= 4; i++) {
-      const y = this.margin.top + (plotH / 4) * i;
-      ctx.beginPath();
-      ctx.moveTo(this.margin.left, y);
-      ctx.lineTo(w - this.margin.right, y);
+      const y = m.top + (ph / 4) * i;
+      ctx.beginPath(); ctx.moveTo(m.left, y); ctx.lineTo(w - m.right, y);
       ctx.stroke();
     }
 
-    // Compute % changes relative to base
+    // Collect percentage data
     const allPcts = [];
-    const pointMap = {}; // symbol -> [{pct, tick}]
-    for (const [sym, points] of Object.entries(this.series)) {
-      const base = this.basePrices[sym] || points[0]?.price || 100;
-      if (points.length < 2) continue;
-      pointMap[sym] = points.map(p => ({ pct: (p.price - base) / base * 100, tick: p.tick }));
-      for (const p of pointMap[sym]) {
-        allPcts.push(p.pct);
-      }
+    const pointMap = {};
+    for (const [sym, pts] of Object.entries(this.series)) {
+      if (pts.length < 2) continue;
+      const base = this.basePrices[sym] || pts[0]?.price || 100;
+      pointMap[sym] = pts.map(p => ({ pct: (p.price - base) / base * 100, tick: p.tick }));
+      for (const p of pointMap[sym]) allPcts.push(p.pct);
     }
-    if (allPcts.length < 2) return;
+    if (allPcts.length < 2) { ctx.restore(); return; }
 
-    const minPct = Math.min(...allPcts);
-    const maxPct = Math.max(...allPcts);
-    const range = Math.max(maxPct - minPct, 0.1);
+    const minP = Math.min(...allPcts);
+    const maxP = Math.max(...allPcts);
+    const range = Math.max(maxP - minP, 0.15);
 
-    // Y axis — percentage
-    ctx.fillStyle = '#888';
-    ctx.font = '7px "Press Start 2P"';
+    // Y axis labels (clipped inside plot)
+    ctx.fillStyle = '#666';
+    ctx.font = '6px "Press Start 2P"';
     ctx.textAlign = 'right';
     for (let i = 0; i <= 4; i++) {
-      const p = maxPct - (range / 4) * i;
-      const y = this.margin.top + (plotH / 4) * i;
-      ctx.fillText(p.toFixed(1) + '%', this.margin.left - 4, y + 2);
+      const p = maxP - (range / 4) * i;
+      const y = m.top + (ph / 4) * i;
+      ctx.fillText(p.toFixed(1) + '%', m.left - 3, y + 2);
     }
 
-    // Legend + last price
-    let ly = this.margin.top;
-    ctx.textAlign = 'left';
-    for (const [sym, color] of Object.entries(this.symbolColors)) {
-      const lp = this.lastPrices[sym];
-      ctx.fillStyle = color;
-      ctx.fillText(sym + (lp ? ' $' + lp.toFixed(0) : ''), w - this.margin.right + 4, ly);
-      ly += 11;
-    }
-
-    // Draw each series
+    // Draw series
     const allTicks = Object.values(pointMap).flatMap(p => p.map(q => q.tick));
-    if (allTicks.length === 0) return;
-    const minTick = Math.min(...allTicks);
-    const maxTick = Math.max(...allTicks);
-    const tickRange = maxTick - minTick || 1;
+    const minT = Math.min(...allTicks);
+    const maxT = Math.max(...allTicks);
+    const tRange = maxT - minT || 1;
 
-    for (const [sym, points] of Object.entries(pointMap)) {
-      if (points.length < 2) continue;
+    for (const [sym, pts] of Object.entries(pointMap)) {
+      if (pts.length < 2) continue;
       ctx.strokeStyle = this.symbolColors[sym] || '#fff';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      points.forEach((p, i) => {
-        const x = this.margin.left + ((p.tick - minTick) / tickRange) * plotW;
-        const y = this.margin.top + plotH - ((p.pct - minPct) / range) * plotH;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
+      pts.forEach((p, i) => {
+        const x = m.left + ((p.tick - minT) / tRange) * pw;
+        const y = m.top + ph - ((p.pct - minP) / range) * ph;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       });
       ctx.stroke();
-
       // Last dot
-      const last = points[points.length - 1];
-      const lx = this.margin.left + ((last.tick - minTick) / tickRange) * plotW;
-      const ly2 = this.margin.top + plotH - ((last.pct - minPct) / range) * plotH;
+      const lp = pts[pts.length - 1];
+      const lx = m.left + ((lp.tick - minT) / tRange) * pw;
+      const ly = m.top + ph - ((lp.pct - minP) / range) * ph;
       ctx.fillStyle = this.symbolColors[sym] || '#fff';
-      ctx.fillRect(lx - 2, ly2 - 2, 4, 4);
+      ctx.fillRect(lx - 1.5, ly - 1.5, 3, 3);
     }
 
-    // Tick label on x-axis
-    ctx.fillStyle = '#666';
+    ctx.restore(); // remove clip
+
+    // Legend — drawn OUTSIDE plot area, at the top-right corner of canvas
+    ctx.textAlign = 'left';
+    ctx.font = '5px "Press Start 2P"';
+    let lx = m.left + 4;
+    let ly = 4;
+    for (const [sym, color] of Object.entries(this.symbolColors)) {
+      const lp = this.lastPrices[sym];
+      const txt = lp ? sym + ' ' + lp.toFixed(0) : sym;
+      // Measure to avoid overflow
+      const tw = ctx.measureText(txt).width;
+      if (lx + tw + 4 > w - 2) { lx = m.left + 4; ly += 8; }
+      ctx.fillStyle = color;
+      ctx.fillText(txt, lx, ly + 5);
+      lx += tw + 10;
+    }
+
+    // Tick label — bottom-right
+    ctx.fillStyle = '#444';
     ctx.font = '5px "Press Start 2P"';
     ctx.textAlign = 'right';
-    ctx.fillText('T' + maxTick, w - this.margin.right, h - 4);
+    ctx.fillText('T+' + this.lastTick, w - 3, h - 3);
   }
 }

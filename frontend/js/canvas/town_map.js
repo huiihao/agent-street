@@ -5,7 +5,7 @@
  * References: a16z/ai-town (PixiJS pixel town), Moltcraft (isometric CSS),
  *   Stanford generative_agents (Phaser tile-map).
  */
-const TILE_PX = 24;
+const TILE_PX = 28;
 const MAP_COLS = 20;
 const MAP_ROWS = 14;
 
@@ -45,12 +45,22 @@ class TownMap {
     this._worldHour = 12;
     this._rainDrops = [];
     this._fireflies = [];
+    this._lastTrades = {};  // agentId -> {direction, reason, tick}
     this._initParticles();
     this._animLoop = null;
 
     this.canvas.addEventListener('mousemove', (e) => this._onMouseMove(e));
     this.canvas.addEventListener('click', (e) => this._onClick(e));
     this.canvas.addEventListener('mouseleave', () => { this.hoveredAgent = null; });
+  }
+
+  updateTrades(trades) {
+    if (!trades) return;
+    for (const t of trades) {
+      if (!['physicist','mathematician','mystic'].includes(t.persona)) {
+        this._lastTrades[t.persona] = { direction: t.direction, reason: t.reason, tick: this._animFrame };
+      }
+    }
   }
 
   async init() {
@@ -385,11 +395,18 @@ class TownMap {
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.fillRect(cx - 6, cy + 7, 12, 3);
 
-      // ── Body sprite (2x scale, 8x12 source → 16x24 pixels) ──
+      // ── Body sprite (2x scale, 10x14 source → 20x28 pixels) ──
       if (isObserver) {
         this._drawObserverSprite(ctx, cx, cy, id, a.mood);
       } else {
-        this._drawTraderSprite(ctx, cx, cy, id, a.mood, a.color, this._animFrame);
+        const trade = this._lastTrades[id];
+        const hasRecentTrade = trade && (this._animFrame - trade.tick) < 60;
+        const tradeMood = hasRecentTrade ? this._tradeMood(trade) : null;
+        this._drawTraderSprite(ctx, cx, cy, id, tradeMood || a.mood, a.color, this._animFrame);
+        // Decision indicator above head
+        if (hasRecentTrade) {
+          this._drawTradeIndicator(ctx, cx, cy, trade);
+        }
       }
 
       // ── ID label ──
@@ -584,6 +601,47 @@ class TownMap {
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
     return `rgb(${Math.min(255,Math.floor(r+r*f))},${Math.min(255,Math.floor(g+g*f))},${Math.min(255,Math.floor(b+b*f))})`;
+  }
+
+  _tradeMood(trade) {
+    if (trade.reason === 'panic_sell') return 'panicked';
+    if (trade.reason === 'profit_take') return 'excited';
+    if (trade.direction === 'BUY') return 'confident';
+    if (trade.direction === 'SELL') return 'worried';
+    return 'calm';
+  }
+
+  _drawTradeIndicator(ctx, cx, cy, trade) {
+    const y = cy - 22;
+    const alpha = Math.max(0, 1 - (this._animFrame - trade.tick) / 60);
+    if (alpha <= 0.1) return;
+
+    if (trade.reason === 'panic_sell') {
+      // Red exclamation
+      ctx.fillStyle = `rgba(255,60,60,${alpha})`;
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('!', cx, y + 8);
+    } else if (trade.direction === 'BUY') {
+      // Green upward arrow
+      ctx.fillStyle = `rgba(78,204,163,${alpha})`;
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('▲', cx, y + 8);
+    } else if (trade.direction === 'SELL') {
+      // Red downward arrow
+      ctx.fillStyle = `rgba(233,69,96,${alpha})`;
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('▼', cx, y + 8);
+    }
+    if (trade.reason === 'profit_take') {
+      // Gold dollar sign
+      ctx.fillStyle = `rgba(240,192,64,${alpha})`;
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('$', cx, y + 6);
+    }
   }
 
   _makePal(hex) {
