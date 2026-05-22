@@ -90,12 +90,13 @@ class TownMap {
     }
     states.forEach(s => {
       const prev = this.agents[s.id];
+      const hadPos = prev && prev.tileX !== undefined;
       this.agents[s.id] = {
         ...prev,
-        targetX: s.tileX, targetY: s.tileY,
-        tileX: prev ? prev.tileX : s.tileX,
-        tileY: prev ? prev.tileY : s.tileY,
-        targetTX: s.tileX, targetTY: s.tileY,
+        tileX: hadPos ? prev.tileX : s.tileX,
+        tileY: hadPos ? prev.tileY : s.tileY,
+        targetTX: s.tileX,
+        targetTY: s.tileY,
         location: s.location,
         mood: s.mood,
         color: s.color || (prev ? prev.color : '#888'),
