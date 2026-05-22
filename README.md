@@ -49,9 +49,9 @@ Real stock bars  ──forced projection──→  🏪 Town Market
 
 ## 🎬 Demo
 
-[![Agent Street Demo](docs/screenshot.mp4)](docs/screenshot.mp4)
+![Agent Street Demo](docs/screenshot.gif)
 
-> _Click the thumbnail above to watch the demo. 16 MBTI agents trading, chatting, and moving through Agent Street in real-time._
+> _16 MBTI agents trading, chatting, and moving through Agent Street in real-time. ~10 seconds._
 
 ## 🗺️ Town Map
 
