@@ -82,6 +82,12 @@ class TownMap {
   }
 
   updateAgentStates(states) {
+    if (!states || !Array.isArray(states)) return;
+    // Diagnostic: verify we got MBTI agents
+    const traderCount = states.filter(s => !['physicist','mathematician','mystic'].includes(s.id)).length;
+    if (this._animFrame < 10 || this._animFrame % 60 === 0) {
+      console.log(`updateAgentStates: ${states.length} total, ${traderCount} traders, ${states.length - traderCount} observers`);
+    }
     states.forEach(s => {
       const prev = this.agents[s.id];
       this.agents[s.id] = {
@@ -352,6 +358,15 @@ class TownMap {
     const ctx = this.ctx;
     // Track drawn positions to offset stacked agents
     const posCount = {};
+
+    // ── DIAGNOSTIC: show agent count + data check ──
+    const count = Object.keys(this.agents).length;
+    const sample = Object.entries(this.agents).slice(0, 5);
+    const sampleStr = sample.map(([id, a]) => `${id}@(${Math.round(a.tileX||0)},${Math.round(a.tileY||0)})`).join(' ');
+    ctx.fillStyle = '#0f0';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`AGENTS:${count} | ${sampleStr}`, 4, this.canvas.height - 4);
 
     for (const [id, a] of Object.entries(this.agents)) {
       const tx = Math.round(a.tileX);
