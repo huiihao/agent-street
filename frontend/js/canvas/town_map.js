@@ -1,357 +1,639 @@
-// Town Map — pixel-art Smallville-style town with sprite-based agents
-
+/**
+ * Town Map — Rich pixel-art Smallville-style town with day/night cycle,
+ * smooth agent movement, weather effects, and detailed tile rendering.
+ *
+ * References: a16z/ai-town (PixiJS pixel town), Moltcraft (isometric CSS),
+ *   Stanford generative_agents (Phaser tile-map).
+ */
 const TILE_PX = 24;
 const MAP_COLS = 20;
 const MAP_ROWS = 14;
-const SPRITE_SCALE = 2; // drawn at 2x => 32px sprites
 
-const TILE_COLORS = {
-    0: '#3a5a3a',  // grass
-    1: '#6b6b6b',  // road horizontal
-    2: '#6b6b6b',  // road vertical
-    3: null,        // building (rendered separately)
-    4: '#2a4a2a',  // tree
-    5: '#3a6a8a',  // water
-    6: '#8a8a8a',  // sidewalk
+const PALETTE = {
+  grass:       '#4a7a3a',
+  grassLight:  '#5a8a4a',
+  grassDark:   '#3a5a2a',
+  road:        '#7a7a7a',
+  roadLine:    '#c8c850',
+  roadEdge:    '#5a5a5a',
+  sidewalk:    '#9a9a9a',
+  water:       '#4a8aba',
+  waterLight:  '#6ab8da',
+  waterDark:   '#2a5a8a',
+  treeTrunk:   '#6a4a2a',
+  treeLeaf:    '#3a7a3a',
+  treeLeafLt:  '#4a9a4a',
+  buildingShadow: 'rgba(0,0,0,0.3)',
+  night:       'rgba(10,10,40,0.55)',
+  evening:     'rgba(40,20,10,0.25)',
+  dawn:        'rgba(60,40,20,0.15)',
 };
 
 class TownMap {
-    constructor(canvasId) {
-        this.canvas = document.getElementById(canvasId);
-        this.ctx = this.canvas.getContext('2d');
-        this.ctx.imageSmoothingEnabled = false;
-        this.mapData = null;
-        this.locations = [];
-        this.homeAssignments = {};
-        this.agents = {};     // id -> {tileX, tileY, location, mood, color, isMoving}
-        this.conversations = [];
-        this.hoveredAgent = null;
-        this.selectedAgent = null;
-        this.onSelectAgent = null;
+  constructor(canvasId) {
+    this.canvas = document.getElementById(canvasId);
+    this.ctx = this.canvas.getContext('2d');
+    this.ctx.imageSmoothingEnabled = false;
+    this.mapData = null;
+    this.locations = [];
+    this.agents = {};
+    this.conversations = [];
+    this.hoveredAgent = null;
+    this.selectedAgent = null;
+    this.onSelectAgent = null;
+    this._animFrame = 0;
+    this._worldHour = 12;
+    this._rainDrops = [];
+    this._fireflies = [];
+    this._initParticles();
+    this._animLoop = null;
 
-        this.canvas.addEventListener('mousemove', (e) => this._onMouseMove(e));
-        this.canvas.addEventListener('click', (e) => this._onClick(e));
-        this.canvas.addEventListener('mouseleave', () => { this.hoveredAgent = null; });
+    this.canvas.addEventListener('mousemove', (e) => this._onMouseMove(e));
+    this.canvas.addEventListener('click', (e) => this._onClick(e));
+    this.canvas.addEventListener('mouseleave', () => { this.hoveredAgent = null; });
+  }
+
+  async init() {
+    const resp = await fetch('/api/town');
+    const data = await resp.json();
+    this.mapData = data.map;
+    this.locations = data.locations;
+    this._startAnimLoop();
+  }
+
+  _initParticles() {
+    for (let i = 0; i < 30; i++) {
+      this._rainDrops.push({
+        x: Math.random() * MAP_COLS * TILE_PX,
+        y: Math.random() * MAP_ROWS * TILE_PX,
+        speed: 3 + Math.random() * 5,
+        len: 3 + Math.random() * 4,
+      });
     }
-
-    async init() {
-        const resp = await fetch('/api/town');
-        const data = await resp.json();
-        this.mapData = data.map;
-        this.locations = data.locations;
-        this.homeAssignments = data.homeAssignments;
-        this.renderFrame();
+    for (let i = 0; i < 12; i++) {
+      this._fireflies.push({
+        x: Math.random() * MAP_COLS * TILE_PX,
+        y: Math.random() * MAP_ROWS * TILE_PX,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.02 + Math.random() * 0.04,
+        radius: 2 + Math.random() * 4,
+      });
     }
+  }
 
-    updateAgentStates(states) {
-        states.forEach(s => {
-            const existing = this.agents[s.id] || {};
-            this.agents[s.id] = {
-                ...existing,
-                tileX: s.tileX,
-                tileY: s.tileY,
-                location: s.location,
-                mood: s.mood,
-                color: s.color || existing.color || '#888',
-                isMoving: s.isMoving,
-            };
-        });
-    }
+  updateAgentStates(states) {
+    states.forEach(s => {
+      const prev = this.agents[s.id];
+      this.agents[s.id] = {
+        ...prev,
+        targetX: s.tileX, targetY: s.tileY,
+        tileX: prev ? prev.tileX : s.tileX,
+        tileY: prev ? prev.tileY : s.tileY,
+        targetTX: s.tileX, targetTY: s.tileY,
+        location: s.location,
+        mood: s.mood,
+        color: s.color || (prev ? prev.color : '#888'),
+        isMoving: s.isMoving,
+      };
+    });
+  }
 
-    updateConversations(convs) {
-        this.conversations = convs || [];
-    }
+  setWorldTime(timeStr) {
+    if (!timeStr) return;
+    const m = timeStr.match(/(\d{2}):(\d{2})/);
+    if (m) this._worldHour = parseInt(m[1]) + parseInt(m[2]) / 60;
+  }
 
-    // ---- Drawing ----
+  updateConversations(convs) {
+    this.conversations = convs || [];
+  }
 
-    renderFrame() {
-        this._drawMap();
-        this._drawConversations();
-        this._drawAgents();
-    }
+  // ── Animation loop ──────────────────────────────────────────
 
-    _drawMap() {
-        const ctx = this.ctx;
-        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-        if (!this.mapData) return;
-
-        // Tiles
-        for (let y = 0; y < MAP_ROWS; y++) {
-            for (let x = 0; x < MAP_COLS; x++) {
-                const tile = this.mapData[y][x];
-                const color = TILE_COLORS[tile];
-                if (color) {
-                    ctx.fillStyle = color;
-                    ctx.fillRect(x * TILE_PX, y * TILE_PX, TILE_PX, TILE_PX);
-                }
-
-                // Trees
-                if (tile === 4) {
-                    ctx.fillStyle = '#4a7a3a';
-                    const cx = x * TILE_PX + TILE_PX / 2;
-                    const cy = y * TILE_PX + TILE_PX / 2 - 2;
-                    ctx.beginPath();
-                    ctx.arc(cx, cy, TILE_PX / 3, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.fillStyle = '#5a3a1a';
-                    ctx.fillRect(cx - 1, cy + TILE_PX / 4, 2, TILE_PX / 4);
-                }
-
-                // Water ripples
-                if (tile === 5) {
-                    ctx.fillStyle = 'rgba(80,160,200,0.3)';
-                    for (let i = 0; i < 3; i++) {
-                        ctx.fillRect(x * TILE_PX + 4 + i * 6, y * TILE_PX + 6 + (i % 2) * 6, 4, 2);
-                    }
-                }
-
-                // Grid overlay
-                ctx.strokeStyle = 'rgba(0,0,0,0.12)';
-                ctx.lineWidth = 0.5;
-                ctx.strokeRect(x * TILE_PX, y * TILE_PX, TILE_PX, TILE_PX);
-            }
+  _startAnimLoop() {
+    const tick = () => {
+      this._animFrame++;
+      // Smooth agent movement (lerp toward target)
+      for (const a of Object.values(this.agents)) {
+        if (a.targetTX !== undefined) {
+          a.tileX += (a.targetTX - a.tileX) * 0.25;
+          a.tileY += (a.targetTY - a.tileY) * 0.25;
+          if (Math.abs(a.targetTX - a.tileX) < 0.02) a.tileX = a.targetTX;
+          if (Math.abs(a.targetTY - a.tileY) < 0.02) a.tileY = a.targetTY;
         }
+      }
+      // Animate particles
+      for (const d of this._rainDrops) {
+        d.y += d.speed;
+        d.x -= 0.5;
+        if (d.y > MAP_ROWS * TILE_PX) { d.y = -d.len; d.x = Math.random() * MAP_COLS * TILE_PX; }
+      }
+      for (const f of this._fireflies) {
+        f.phase += f.speed;
+        f.x += Math.sin(f.phase * 3) * 0.3;
+        f.y += Math.cos(f.phase * 2) * 0.2;
+      }
 
-        // Buildings
-        this.locations.forEach(loc => {
-            const px = loc.tileX * TILE_PX - TILE_PX / 2;
-            const py = loc.tileY * TILE_PX - TILE_PX / 2;
-            const w = loc.width * TILE_PX;
-            const h = loc.height * TILE_PX;
+      this._renderFrame();
+      this._animLoop = requestAnimationFrame(tick);
+    };
+    this._animLoop = requestAnimationFrame(tick);
+  }
 
-            ctx.fillStyle = loc.color;
-            ctx.fillRect(px, py, w, h);
-            ctx.fillStyle = this._darken(loc.color, 0.35);
-            ctx.fillRect(px, py, w, 5);
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(px, py, w, h);
+  renderFrame() {
+    // Public render triggered by WS tick — just updates world time from data
+    // The actual redraw happens continuously via requestAnimationFrame
+  }
 
-            // Label — ensure on-screen
-            const labelY = Math.min(py + h + 12, this.canvas.height - 4);
-            ctx.fillStyle = '#f0c040';
-            ctx.font = '6px "Press Start 2P"';
-            ctx.textAlign = 'center';
-            ctx.fillText(loc.name, px + w / 2, labelY);
-        });
-    }
+  _renderFrame() {
+    this._drawMap();
+    this._drawConversations();
+    this._drawWeather();
+    this._drawAgents();
+    this._drawDayNightOverlay();
+  }
 
-    _drawAgents() {
-        const ctx = this.ctx;
-        for (const [id, agent] of Object.entries(this.agents)) {
-            const cx = agent.tileX * TILE_PX + TILE_PX / 2;
-            const cy = agent.tileY * TILE_PX + TILE_PX / 2;
+  // ── Map tiles ───────────────────────────────────────────────
 
-            // Pixel art sprite (centered at cx, cy)
-            const spriteX = cx - 8 * SPRITE_SCALE / 2;
-            const spriteY = cy - 8 * SPRITE_SCALE / 2;
+  _drawMap() {
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-            ctx.save();
-            const seed = this._seedFromId(id);
-            const mood = agent.mood || 'calm';
-            const color = agent.color || '#888';
+    if (!this.mapData) return;
 
-            // Draw procedural pixel sprite
-            this._drawMiniSprite(ctx, spriteX, spriteY, mood, color, seed, SPRITE_SCALE);
-            ctx.restore();
+    for (let y = 0; y < MAP_ROWS; y++) {
+      for (let x = 0; x < MAP_COLS; x++) {
+        const tile = this.mapData[y][x];
+        const px = x * TILE_PX;
+        const py = y * TILE_PX;
 
-            // Mood glow ring
-            const glowColors = {
-                confident: 'rgba(78,204,163,0.45)',
-                calm: 'rgba(107,174,214,0.35)',
-                worried: 'rgba(240,160,64,0.45)',
-                excited: 'rgba(240,192,64,0.55)',
-                panicked: 'rgba(233,69,96,0.55)',
-            };
-            ctx.strokeStyle = glowColors[mood] || 'rgba(136,136,136,0.3)';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(spriteX - 3, spriteY - 3, 8 * SPRITE_SCALE + 6, 8 * SPRITE_SCALE + 6);
-
-            // Select/hover highlight
-            if (this.hoveredAgent === id || this.selectedAgent === id) {
-                ctx.strokeStyle = this.selectedAgent === id ? '#f0c040' : '#fff';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(spriteX - 5, spriteY - 5, 8 * SPRITE_SCALE + 10, 8 * SPRITE_SCALE + 10);
-            }
-
-            // ID label below sprite
-            ctx.fillStyle = '#fff';
-            ctx.font = '5px "Press Start 2P"';
-            ctx.textAlign = 'center';
-            ctx.fillText(id, cx, spriteY + 8 * SPRITE_SCALE + 12);
-
-            // Moving indicator dots
-            if (agent.isMoving) {
-                ctx.fillStyle = '#fff';
-                for (let i = -3; i <= 3; i += 3) {
-                    ctx.fillRect(cx + i, spriteY + 8 * SPRITE_SCALE + 16, 2, 2);
-                }
-            }
+        switch (tile) {
+          case 0: this._drawGrass(px, py); break;
+          case 1: case 2: this._drawRoad(px, py, tile); break;
+          case 4: this._drawTree(px, py); break;
+          case 5: this._drawWater(px, py); break;
+          case 6: this._drawSidewalk(px, py); break;
         }
+      }
     }
 
-    _drawMiniSprite(ctx, x, y, mood, color, seed, scale) {
-        // Build a compact 8x8 sprite representing the agent
-        const palette = this._makePalette(color);
-        const face = this._facePattern(mood);
+    // Buildings on top of tiles
+    for (const loc of this.locations) {
+      this._drawBuilding(loc);
+    }
+  }
 
-        for (let row = 0; row < 8; row++) {
-            for (let col = 0; col < 8; col++) {
-                let fill = null;
+  _drawGrass(x, y) {
+    const ctx = this.ctx;
+    ctx.fillStyle = PALETTE.grass;
+    ctx.fillRect(x, y, TILE_PX, TILE_PX);
+    // Random subtle grass variation
+    const seed = (x * 31 + y * 17) % 7;
+    if (seed === 0) ctx.fillStyle = PALETTE.grassLight;
+    else if (seed === 1) ctx.fillStyle = PALETTE.grassDark;
+    if (seed < 2) ctx.fillRect(x, y, TILE_PX, TILE_PX);
+    // Tiny flowers
+    if (seed === 3) {
+      ctx.fillStyle = '#f0f050';
+      ctx.fillRect(x + 6, y + 10, 2, 2);
+      ctx.fillRect(x + 14, y + 6, 2, 2);
+      ctx.fillStyle = '#f08080';
+      ctx.fillRect(x + 16, y + 14, 2, 2);
+    }
+    // Stone
+    if (seed === 4) {
+      ctx.fillStyle = '#777';
+      ctx.fillRect(x + 10, y + 12, 4, 3);
+    }
+  }
 
-                // Hair (top 3 rows, varied by seed)
-                if (row < 3 && col >= 1 && col <= 6) {
-                    fill = palette.dark;
-                    if ((seed + row + col) % 4 === 0) fill = palette.mid;
-                }
-                // Face (rows 3-5)
-                if (row >= 3 && row <= 5 && col >= 2 && col <= 5) {
-                    fill = palette.skin;
-                }
-                // Eyes (row 3, col 2-3 and col 4-5)
-                if (row === 3) {
-                    if ((col === 2 || col === 3 || col === 4 || col === 5) &&
-                        face.eyes[col - 2]) {
-                        fill = '#111';
-                    }
-                }
-                // Mouth (row 4-5, col 3-4)
-                if (row >= 4 && row <= 5 && col >= 3 && col <= 4) {
-                    const mi = (row - 4) * 2 + (col - 3);
-                    if (mi < face.mouth.length && face.mouth[mi]) {
-                        fill = '#111';
-                    }
-                }
-                // Body (rows 6-7)
-                if (row >= 6 && col >= 2 && col <= 5) {
-                    fill = palette.mid;
-                }
+  _drawRoad(x, y, tile) {
+    const ctx = this.ctx;
+    ctx.fillStyle = PALETTE.road;
+    ctx.fillRect(x, y, TILE_PX, TILE_PX);
 
-                if (fill) {
-                    ctx.fillStyle = fill;
-                    ctx.fillRect(x + col * scale, y + row * scale, scale, scale);
-                }
-            }
+    // Dashed center line
+    if (tile === 1) {
+      // Horizontal road — vertical center line
+      if (Math.floor(x / TILE_PX) % 3 === 1) {
+        ctx.fillStyle = PALETTE.roadLine;
+        ctx.fillRect(x + TILE_PX / 2 - 1, y + 4, 2, 4);
+        ctx.fillRect(x + TILE_PX / 2 - 1, y + 16, 2, 4);
+      }
+    } else if (tile === 2) {
+      // Vertical road — horizontal center line
+      if (Math.floor(y / TILE_PX) % 3 === 1) {
+        ctx.fillStyle = PALETTE.roadLine;
+        ctx.fillRect(x + 4, y + TILE_PX / 2 - 1, 4, 2);
+        ctx.fillRect(x + 16, y + TILE_PX / 2 - 1, 4, 2);
+      }
+    }
+    // Edge shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.08)';
+    ctx.fillRect(x, y, TILE_PX, 2);
+    ctx.fillRect(x, y, 2, TILE_PX);
+  }
+
+  _drawSidewalk(x, y) {
+    const ctx = this.ctx;
+    ctx.fillStyle = PALETTE.sidewalk;
+    ctx.fillRect(x, y, TILE_PX, TILE_PX);
+    // Grid lines
+    ctx.fillStyle = '#7a7a7a';
+    if (Math.floor(x / TILE_PX) % 2 === 0) {
+      ctx.fillRect(x + 11, y, 2, TILE_PX);
+    }
+  }
+
+  _drawTree(x, y) {
+    const ctx = this.ctx;
+    // Trunk
+    ctx.fillStyle = PALETTE.treeTrunk;
+    ctx.fillRect(x + 10, y + 18, 4, 6);
+    // Leaves (clustered circles)
+    ctx.fillStyle = PALETTE.treeLeaf;
+    ctx.beginPath(); ctx.arc(x + 12, y + 12, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = PALETTE.treeLeafLt;
+    ctx.beginPath(); ctx.arc(x + 8, y + 8, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = PALETTE.treeLeaf;
+    ctx.beginPath(); ctx.arc(x + 16, y + 7, 7, 0, Math.PI * 2); ctx.fill();
+    // Shadow under tree
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(x + 4, y + 20, 16, 3);
+  }
+
+  _drawWater(x, y) {
+    const ctx = this.ctx;
+    const t = this._animFrame * 0.05;
+    const shimmer = Math.sin(t + x * 0.3 + y * 0.3) * 0.3;
+    const base = PALETTE.water;
+    ctx.fillStyle = base;
+    ctx.fillRect(x, y, TILE_PX, TILE_PX);
+    // Wave highlights
+    const h = 5 + shimmer * 3;
+    ctx.fillStyle = PALETTE.waterLight;
+    ctx.fillRect(x, y + h, TILE_PX, 1);
+    ctx.fillStyle = PALETTE.waterDark;
+    ctx.fillRect(x, y + h + 4, TILE_PX, 1);
+    // Ripples
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(x + 4 + shimmer * 2, y + 8, 3, 1);
+    ctx.fillRect(x + 14 - shimmer * 2, y + 16, 2, 1);
+  }
+
+  // ── Buildings ───────────────────────────────────────────────
+
+  _drawBuilding(loc) {
+    const ctx = this.ctx;
+    const bx = loc.tileX * TILE_PX - TILE_PX / 2;
+    const by = loc.tileY * TILE_PX - TILE_PX / 2;
+    const w = loc.width * TILE_PX;
+    const h = loc.height * TILE_PX;
+
+    // Shadow
+    ctx.fillStyle = PALETTE.buildingShadow;
+    ctx.fillRect(bx + 3, by + 3, w, h);
+
+    // Wall
+    ctx.fillStyle = loc.color;
+    ctx.fillRect(bx, by, w, h);
+
+    // Wall texture — horizontal brick lines
+    ctx.fillStyle = this._darken(loc.color, 0.08);
+    for (let r = 4; r < h; r += 6) {
+      ctx.fillRect(bx + 2, by + r, w - 4, 1);
+    }
+
+    // Roof
+    ctx.fillStyle = this._darken(loc.color, 0.35);
+    ctx.fillRect(bx - 1, by - 3, w + 2, 6);
+    ctx.fillStyle = this._darken(loc.color, 0.2);
+    ctx.fillRect(bx, by + 2, w, 3);
+
+    // Window (if building is big enough)
+    if (w >= 48 && h >= 36) {
+      const wx = bx + w / 2 - 8;
+      const wy = by + h / 2 - 6;
+      ctx.fillStyle = '#ffe8a0';
+      ctx.fillRect(wx, wy, 16, 12);
+      ctx.strokeStyle = '#3a2a1a';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(wx, wy, 16, 12);
+      // Window cross
+      ctx.fillStyle = '#3a2a1a';
+      ctx.fillRect(wx + 7, wy, 2, 12);
+      ctx.fillRect(wx, wy + 5, 16, 2);
+    }
+
+    // Door
+    const dx = bx + w / 2 - 5;
+    const dy = by + h - 14;
+    ctx.fillStyle = this._darken(loc.color, 0.45);
+    ctx.fillRect(dx, dy, 10, 12);
+    ctx.fillStyle = '#f0c040';
+    ctx.fillRect(dx + 8, dy + 5, 1, 1); // doorknob
+
+    // Outline
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx, by, w, h);
+
+    // Label
+    const labelY = Math.min(by + h + 14, this.canvas.height - 4);
+    ctx.fillStyle = '#f0c040';
+    ctx.font = '6px "Press Start 2P"';
+    ctx.textAlign = 'center';
+    ctx.fillText(loc.name, bx + w / 2, labelY);
+  }
+
+  // ── Agents ──────────────────────────────────────────────────
+
+  _drawAgents() {
+    const ctx = this.ctx;
+    for (const [id, a] of Object.entries(this.agents)) {
+      const cx = a.tileX * TILE_PX + TILE_PX / 2;
+      const cy = a.tileY * TILE_PX + TILE_PX / 2;
+      const isSelected = this.selectedAgent === id;
+      const isHovered = this.hoveredAgent === id;
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(cx - 8, cy + 8, 16, 4);
+
+      // Mood glow
+      const glow = {
+        confident: 'rgba(78,204,163,0.4)',
+        calm: 'rgba(107,174,214,0.3)',
+        worried: 'rgba(240,160,64,0.4)',
+        excited: 'rgba(240,192,64,0.5)',
+        panicked: 'rgba(233,69,96,0.5)',
+      }[a.mood] || 'rgba(136,136,136,0.25)';
+      ctx.fillStyle = glow;
+      ctx.fillRect(cx - 14, cy - 14, 28, 28);
+
+      // Pixel sprite (compact 10x12)
+      const sx = cx - 5;
+      const sy = cy - 6;
+      this._drawAgentSprite(ctx, sx, sy, a.mood || 'calm', a.color || '#888', id);
+
+      // Highlight ring
+      if (isHovered || isSelected) {
+        ctx.strokeStyle = isSelected ? '#f0c040' : 'rgba(255,255,255,0.8)';
+        ctx.lineWidth = isSelected ? 2 : 1;
+        const r = 11;
+        ctx.strokeRect(cx - r, cy - r, r * 2, r * 2);
+      }
+
+      // ID label
+      ctx.fillStyle = '#fff';
+      ctx.font = '5px "Press Start 2P"';
+      ctx.textAlign = 'center';
+      ctx.fillText(id, cx, cy + 18);
+
+      // Moving dots
+      if (a.isMoving) {
+        const phase = this._animFrame % 20;
+        for (let i = 0; i < 3; i++) {
+          const alpha = phase > i * 6 ? 1 : 0.3;
+          ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+          ctx.fillRect(cx - 4 + i * 4, cy + 21, 2, 2);
         }
+      }
     }
+  }
 
-    _facePattern(mood) {
-        const patterns = {
-            confident: { eyes: [1, 0, 1, 1], mouth: [0, 1, 1, 0] },
-            calm:     { eyes: [1, 0, 1, 0], mouth: [0, 1, 1, 0] },
-            worried:  { eyes: [1, 1, 1, 1], mouth: [1, 0, 0, 1] },
-            excited:  { eyes: [1, 1, 1, 1], mouth: [1, 1, 1, 1] },
-            panicked: { eyes: [1, 1, 1, 1], mouth: [1, 1, 1, 1] },
-        };
-        return patterns[mood] || patterns.calm;
-    }
+  _drawAgentSprite(ctx, x, y, mood, color, id) {
+    const p = this._makePal(color);
+    const f = this._face(mood);
+    const seed = this._seed(id);
 
-    _makePalette(hex) {
-        const r = parseInt(hex.slice(1, 3), 16);
-        const g = parseInt(hex.slice(3, 5), 16);
-        const b = parseInt(hex.slice(5, 7), 16);
-        return {
-            dark: `rgb(${Math.floor(r*0.4)},${Math.floor(g*0.4)},${Math.floor(b*0.4)})`,
-            mid: hex,
-            light: `rgb(${Math.min(255,Math.floor(r*1.4))},${Math.min(255,Math.floor(g*1.4))},${Math.min(255,Math.floor(b*1.4))})`,
-            skin: '#F5D0A9',
-        };
-    }
+    const sprite = [
+      // row: pixels (0=transparent, 1=hair, 2=skin, 3=eye, 4=mouth, 5=body)
+      [0,0,1,1,1,1,1,1,0,0],  // hair
+      [0,1,1,1,1,1,1,1,1,0],  // hair
+      [0,2,2,2,2,2,2,2,2,0],  // forehead
+      [0,2,2,3,3,2,3,3,2,0],  // eyes
+      [0,2,2,2,4,2,2,4,2,0],  // nose/mouth
+      [0,2,2,2,2,2,2,2,2,0],  // chin
+      [0,5,5,5,5,5,5,5,5,0],  // body
+      [0,5,5,5,5,5,5,5,5,0],  // body
+    ];
 
-    _drawConversations() {
-        const ctx = this.ctx;
-        for (const conv of this.conversations) {
-            const positions = [];
-            for (const pid of conv.participants) {
-                const a = this.agents[pid];
-                if (a) positions.push({ x: a.tileX * TILE_PX + TILE_PX / 2, y: a.tileY * TILE_PX + TILE_PX / 2 });
-            }
-            if (positions.length < 2) continue;
+    // Modulate hair by seed
+    if (seed % 3 === 0) { sprite[0][2] = 0; sprite[0][7] = 0; } // spiky
 
-            const midX = positions.reduce((s, p) => s + p.x, 0) / positions.length;
-            const midY = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+    for (let r = 0; r < sprite.length; r++) {
+      for (let c = 0; c < sprite[r].length; c++) {
+        const v = sprite[r][c];
+        let fill = null;
+        if (v === 1) fill = p.dark;
+        else if (v === 2) fill = p.skin;
+        else if (v === 3) fill = (f.eyes && c >= 3 && c <= 6 && (c === 3 || c === 6 || f.eyes[c - 3])) ? '#111' : p.skin;
+        else if (v === 4) fill = (f.mouth && f.mouth[c - 4]) ? '#111' : p.skin;
+        else if (v === 5) fill = p.mid;
 
-            // Connecting lines
-            ctx.strokeStyle = 'rgba(255,240,150,0.35)';
-            ctx.lineWidth = 1;
-            for (let i = 0; i < positions.length; i++) {
-                for (let j = i + 1; j < positions.length; j++) {
-                    ctx.beginPath();
-                    ctx.moveTo(positions[i].x, positions[i].y);
-                    ctx.lineTo(positions[j].x, positions[j].y);
-                    ctx.stroke();
-                }
-            }
-
-            // Speech bubble with last line of conversation
-            const lastLine = conv.lines[conv.lines.length - 1];
-            const text = lastLine
-                ? lastLine.speaker + ': ' + lastLine.content
-                : '...';
-            const short = text.length > 30 ? text.slice(0, 28) + '..' : text;
-
-            ctx.font = '5px monospace';
-            const textW = ctx.measureText(short).width + 12;
-            const bubbleW = Math.max(textW, 40);
-            const bubbleH = 16;
-            const bx = midX - bubbleW / 2;
-            const by = midY - 42;
-
-            ctx.fillStyle = 'rgba(0,0,0,0.85)';
-            ctx.fillRect(bx, by, bubbleW, bubbleH);
-            ctx.strokeStyle = '#555';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(bx, by, bubbleW, bubbleH);
-            ctx.fillStyle = '#fff';
-            ctx.fillText(short, bx + 6, by + 11);
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fillRect(x + c, y + r, 1, 1);
         }
+      }
     }
+  }
 
-    // ---- Interaction ----
+  _face(mood) {
+    const patterns = {
+      confident: { eyes: [0,1,1,0], mouth: [0,1,1,0,0,0] },
+      calm:     { eyes: [0,1,0,0], mouth: [0,0,1,1,0,0] },
+      worried:  { eyes: [1,1,1,1], mouth: [1,0,0,0,0,1] },
+      excited:  { eyes: [1,1,1,1], mouth: [0,1,1,1,1,0] },
+      panicked: { eyes: [1,1,1,1], mouth: [1,1,1,1,1,1] },
+    };
+    return patterns[mood] || patterns.calm;
+  }
 
-    _onMouseMove(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
-        const mx = (e.clientX - rect.left) * scaleX;
-        const my = (e.clientY - rect.top) * scaleY;
-        const tileX = Math.floor(mx / TILE_PX);
-        const tileY = Math.floor(my / TILE_PX);
+  _makePal(hex) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return {
+      dark: `rgb(${Math.floor(r*0.35)},${Math.floor(g*0.35)},${Math.floor(b*0.35)})`,
+      mid: hex,
+      light: `rgb(${Math.min(255,Math.floor(r*1.3))},${Math.min(255,Math.floor(g*1.3))},${Math.min(255,Math.floor(b*1.3))})`,
+      skin: '#F5D0A9',
+    };
+  }
 
-        // Find closest agent within 1.5 tiles
-        let bestAgent = null;
-        let bestDist = 999;
-        for (const [id, agent] of Object.entries(this.agents)) {
-            const dx = agent.tileX - tileX;
-            const dy = agent.tileY - tileY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist < 1.8 && dist < bestDist) {
-                bestDist = dist;
-                bestAgent = id;
-            }
+  // ── Conversations ───────────────────────────────────────────
+
+  _drawConversations() {
+    const ctx = this.ctx;
+    for (const conv of this.conversations) {
+      const positions = [];
+      for (const pid of conv.participants) {
+        const a = this.agents[pid];
+        if (a) positions.push({ x: a.tileX * TILE_PX + TILE_PX / 2, y: a.tileY * TILE_PX + TILE_PX / 2 });
+      }
+      if (positions.length < 2) continue;
+
+      const mx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+      const my = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+
+      // Thin connection lines
+      for (let i = 0; i < positions.length; i++) {
+        for (let j = i + 1; j < positions.length; j++) {
+          ctx.strokeStyle = 'rgba(255,240,150,0.25)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(positions[i].x, positions[i].y);
+          ctx.lineTo(positions[j].x, positions[j].y);
+          ctx.stroke();
+          ctx.setLineDash([]);
         }
-        this.hoveredAgent = bestAgent;
-        this.canvas.style.cursor = bestAgent ? 'pointer' : 'default';
+      }
+
+      // Speech bubble
+      const lastLine = conv.lines[conv.lines.length - 1];
+      const text = lastLine
+        ? lastLine.speaker + ': ' + lastLine.content
+        : '...';
+      const short = text.length > 28 ? text.slice(0, 26) + '..' : text;
+
+      ctx.font = '5px monospace';
+      const tw = ctx.measureText(short).width;
+      const bw = Math.max(tw + 14, 50);
+      const bh = 15;
+      const bx = mx - bw / 2;
+      const by = my - 38;
+
+      // Bubble body
+      ctx.fillStyle = 'rgba(20,20,40,0.92)';
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.strokeStyle = '#556';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx, by, bw, bh);
+      // Bubble tail
+      ctx.fillStyle = 'rgba(20,20,40,0.92)';
+      ctx.beginPath();
+      ctx.moveTo(bx + bw / 2 - 4, by + bh);
+      ctx.lineTo(bx + bw / 2, by + bh + 5);
+      ctx.lineTo(bx + bw / 2 + 4, by + bh);
+      ctx.fill();
+      ctx.strokeStyle = '#556';
+      ctx.beginPath();
+      ctx.moveTo(bx + bw / 2 - 4, by + bh);
+      ctx.lineTo(bx + bw / 2, by + bh + 5);
+      ctx.stroke();
+
+      ctx.fillStyle = '#e0e0e0';
+      ctx.fillText(short, bx + 7, by + 10);
+    }
+  }
+
+  // ── Weather ─────────────────────────────────────────────────
+
+  _drawWeather() {
+    const ctx = this.ctx;
+    const hour = this._worldHour;
+
+    // Rain (occasional, based on world time hash)
+    const rainChance = ((hour * 7) % 10) < 2 ? 1 : 0; // ~20% chance
+    if (rainChance) {
+      ctx.fillStyle = 'rgba(150,180,210,0.4)';
+      for (const d of this._rainDrops) {
+        ctx.fillRect(d.x, d.y, 1, d.len);
+      }
     }
 
-    _onClick(e) {
-        if (this.hoveredAgent && this.onSelectAgent) {
-            this.selectedAgent = this.hoveredAgent;
-            this.onSelectAgent(this.hoveredAgent);
-        }
+    // Fireflies at night/evening
+    if (hour < 6 || hour > 20) {
+      const alpha = hour < 6 ? (6 - hour) / 6 : (hour - 20) / 4;
+      for (const f of this._fireflies) {
+        const pulse = Math.sin(f.phase) * 0.5 + 0.5;
+        const a = alpha * pulse * 0.8;
+        ctx.fillStyle = `rgba(240,240,100,${a})`;
+        ctx.fillRect(f.x - 1, f.y - 1, f.radius, f.radius);
+      }
     }
 
-    _darken(hex, f) {
-        const r = parseInt(hex.slice(1, 3), 16);
-        const g = parseInt(hex.slice(3, 5), 16);
-        const b = parseInt(hex.slice(5, 7), 16);
-        return `rgb(${Math.floor(r*(1-f))},${Math.floor(g*(1-f))},${Math.floor(b*(1-f))})`;
+    // Birds during day
+    if (hour > 7 && hour < 17 && this._animFrame % 120 < 60) {
+      const bx = (this._animFrame * 0.4) % (MAP_COLS * TILE_PX + 40) - 20;
+      const by = 20 + Math.sin(this._animFrame * 0.03) * 8;
+      ctx.fillStyle = '#333';
+      ctx.fillRect(bx, by, 1, 2);
+      ctx.fillRect(bx - 3, by + 1, 1, 1);
+      ctx.fillRect(bx + 3, by + 1, 1, 1);
+      ctx.fillRect(bx + 6, by, 1, 2);
+      ctx.fillRect(bx + 3, by + 1, 1, 1);
+      ctx.fillRect(bx + 9, by + 1, 1, 1);
     }
+  }
 
-    _seedFromId(id) {
-        let h = 0;
-        for (let i = 0; i < id.length; i++) h = ((h << 5) - h) + id.charCodeAt(i);
-        return Math.abs(h);
+  // ── Day/Night overlay ───────────────────────────────────────
+
+  _drawDayNightOverlay() {
+    const ctx = this.ctx;
+    const h = this._worldHour;
+
+    // Determine overlay based on time of day
+    let overlay = null;
+    if (h >= 22 || h < 5) {
+      overlay = PALETTE.night;          // Deep night 22:00-05:00
+    } else if (h >= 20) {
+      const t = (h - 20) / 2;           // Evening 20:00-22:00
+      overlay = `rgba(25,10,30,${0.15 + t * 0.4})`;
+    } else if (h < 7) {
+      const t = (7 - h) / 2;            // Dawn 05:00-07:00
+      overlay = `rgba(30,20,30,${0.1 + t * 0.4})`;
     }
+    // Midday: no overlay
+
+    if (overlay) {
+      ctx.fillStyle = overlay;
+      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+  }
+
+  // ── Interaction ─────────────────────────────────────────────
+
+  _onMouseMove(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const sx = this.canvas.width / rect.width;
+    const sy = this.canvas.height / rect.height;
+    const mx = (e.clientX - rect.left) * sx;
+    const my = (e.clientY - rect.top) * sy;
+    const tx = mx / TILE_PX;
+    const ty = my / TILE_PX;
+
+    let best = null, bestDist = 99;
+    for (const [id, a] of Object.entries(this.agents)) {
+      const d = Math.hypot(a.tileX - tx, a.tileY - ty);
+      if (d < 1.6 && d < bestDist) { bestDist = d; best = id; }
+    }
+    this.hoveredAgent = best;
+    this.canvas.style.cursor = best ? 'pointer' : 'default';
+  }
+
+  _onClick(e) {
+    if (this.hoveredAgent && this.onSelectAgent) {
+      this.selectedAgent = this.hoveredAgent;
+      this.onSelectAgent(this.hoveredAgent);
+    }
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────
+
+  _darken(hex, f) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgb(${Math.floor(r*(1-f))},${Math.floor(g*(1-f))},${Math.floor(b*(1-f))})`;
+  }
+
+  _seed(id) {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = ((h << 5) - h) + id.charCodeAt(i);
+    return Math.abs(h);
+  }
 }

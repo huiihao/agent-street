@@ -78,6 +78,7 @@
     // Update world time and tick
     if (data.worldTime) {
       stWorldTime.textContent = '🕐 ' + data.worldTime;
+      townMap.setWorldTime(data.worldTime);
     }
     stTick.textContent = 'TICK ' + data.tick;
   });

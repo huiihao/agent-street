@@ -92,7 +92,7 @@ body {
   max-width: 100%;
 }
 
-#town-canvas { border-radius: 2px; }
+#town-canvas { box-shadow: 0 0 20px rgba(0,0,0,0.5), inset 0 0 40px rgba(0,0,0,0.15); }
 
 #sentiment-bar-wrap {
   display: flex;
@@ -296,6 +296,9 @@ body {
   font-size: 7px;
 }
 
+#st-world-time { color: var(--gold); min-width: 160px; }
+#st-speed { cursor: pointer; user-select: none; padding: 2px 6px; border: 1px solid #444; }
+#st-speed:hover { border-color: var(--gold); }
 #st-status.connected { color: var(--green); }
 #st-status.disconnected { color: var(--red); }
 #st-sim.running { color: var(--green); }
