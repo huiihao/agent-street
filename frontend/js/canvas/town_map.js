@@ -350,127 +350,80 @@ class TownMap {
 
   _drawAgents() {
     const ctx = this.ctx;
+    // Track drawn positions to offset stacked agents
+    const posCount = {};
+
     for (const [id, a] of Object.entries(this.agents)) {
-      const cx = a.tileX * TILE_PX + TILE_PX / 2;
-      const cy = a.tileY * TILE_PX + TILE_PX / 2;
+      const tx = Math.round(a.tileX);
+      const ty = Math.round(a.tileY);
+      const key = `${tx},${ty}`;
+      const stackIdx = posCount[key] || 0;
+      posCount[key] = stackIdx + 1;
+
+      // Offset stacked agents so they don't fully overlap
+      const offX = (stackIdx % 2) * 6 - 3;
+      const offY = Math.floor(stackIdx / 2) * 6 - 3;
+      const cx = tx * TILE_PX + TILE_PX / 2 + offX;
+      const cy = ty * TILE_PX + TILE_PX / 2 + offY;
       const isSelected = this.selectedAgent === id;
       const isHovered = this.hoveredAgent === id;
 
-      // Shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(cx - 8, cy + 8, 16, 4);
+      // ── Bold colored body (10x12 px at 1:1, impossible to miss) ──
+      ctx.fillStyle = a.color || '#888';
+      ctx.fillRect(cx - 5, cy - 6, 10, 12);
 
-      // Mood glow
-      const glow = {
-        confident: 'rgba(78,204,163,0.4)',
-        calm: 'rgba(107,174,214,0.3)',
-        worried: 'rgba(240,160,64,0.4)',
-        excited: 'rgba(240,192,64,0.5)',
-        panicked: 'rgba(233,69,96,0.5)',
-      }[a.mood] || 'rgba(136,136,136,0.25)';
-      ctx.fillStyle = glow;
-      ctx.fillRect(cx - 14, cy - 14, 28, 28);
+      // Hair (darker top)
+      ctx.fillStyle = this._darken(a.color || '#888', 0.4);
+      ctx.fillRect(cx - 5, cy - 6, 10, 4);
 
-      // Pixel sprite, 3x scale, bright background + white outline
-      const SPRITE_W = 10, SPRITE_H = 8, SCALE = 3;
-      const sx = cx - (SPRITE_W * SCALE) / 2;
-      const sy = cy - (SPRITE_H * SCALE) / 2 - 2;
-      // White outline surround for max contrast
+      // Face (skin tone rectangle)
+      ctx.fillStyle = '#F5D0A9';
+      ctx.fillRect(cx - 3, cy - 1, 6, 4);
+
+      // Eyes (two black dots)
+      ctx.fillStyle = '#111';
+      ctx.fillRect(cx - 2, cy, 1, 1);
+      ctx.fillRect(cx + 1, cy, 1, 1);
+
+      // Mood mouth
+      const mouths = { confident: '—', calm: '–', worried: 'o', excited: 'D', panicked: '□' };
+      const mouth = mouths[a.mood] || '–';
+      ctx.font = '4px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#111';
+      ctx.fillText(mouth, cx, cy + 3);
+
+      // ── White outline ──
       ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(sx - 2, sy - 2, SPRITE_W * SCALE + 4, SPRITE_H * SCALE + 4);
-      // Bright plate
-      ctx.fillStyle = 'rgba(255,255,255,0.25)';
-      ctx.fillRect(sx - 2, sy - 2, SPRITE_W * SCALE + 4, SPRITE_H * SCALE + 4);
-      // Dark inner plate
-      ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(sx, sy, SPRITE_W * SCALE, SPRITE_H * SCALE);
-      this._drawAgentSprite(ctx, sx, sy, a.mood || 'calm', a.color || '#888', id, SCALE);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx - 6, cy - 7, 12, 14);
 
-      // Highlight ring
+      // ── Selection highlight ──
       if (isHovered || isSelected) {
-        ctx.strokeStyle = isSelected ? '#f0c040' : 'rgba(255,255,255,0.8)';
-        ctx.lineWidth = isSelected ? 2 : 1;
-        const r = 11;
-        ctx.strokeRect(cx - r, cy - r, r * 2, r * 2);
+        ctx.strokeStyle = isSelected ? '#f0c040' : 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = isSelected ? 3 : 1;
+        ctx.strokeRect(cx - 8, cy - 9, 16, 18);
       }
 
-      // ID label
-      const labelY = sy + SPRITE_H * SCALE + 12;
-      ctx.fillStyle = '#fff';
-      ctx.font = '5px "Press Start 2P"';
-      ctx.textAlign = 'center';
-      ctx.fillText(id, cx, labelY);
+      // ── Shadow ──
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(cx - 4, cy + 6, 8, 3);
 
-      // Moving dots
+      // ── ID label ──
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 6px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(id, cx, cy + 16);
+
+      // ── Moving dots ──
       if (a.isMoving) {
         const phase = this._animFrame % 20;
         for (let i = 0; i < 3; i++) {
-          const alpha = phase > i * 6 ? 1 : 0.3;
-          ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-          ctx.fillRect(cx - 4 + i * 4, labelY + 4, 2, 2);
+          ctx.fillStyle = `rgba(255,255,255,${phase > i * 6 ? 1 : 0.3})`;
+          ctx.fillRect(cx - 4 + i * 4, cy + 18, 2, 2);
         }
       }
     }
-  }
-
-  _drawAgentSprite(ctx, x, y, mood, color, id, scale = 2) {
-    const p = this._makePal(color);
-    const f = this._face(mood);
-    const seed = this._seed(id);
-
-    const sprite = [
-      // row: pixels (0=transparent, 1=hair, 2=skin, 3=eye, 4=mouth, 5=body)
-      [0,0,1,1,1,1,1,1,0,0],
-      [0,1,1,1,1,1,1,1,1,0],
-      [0,2,2,2,2,2,2,2,2,0],
-      [0,2,2,3,3,2,3,3,2,0],
-      [0,2,2,2,4,2,2,4,2,0],
-      [0,2,2,2,2,2,2,2,2,0],
-      [0,5,5,5,5,5,5,5,5,0],
-      [0,5,5,5,5,5,5,5,5,0],
-    ];
-
-    if (seed % 3 === 0) { sprite[0][2] = 0; sprite[0][7] = 0; }
-
-    for (let r = 0; r < sprite.length; r++) {
-      for (let c = 0; c < sprite[r].length; c++) {
-        const v = sprite[r][c];
-        let fill = null;
-        if (v === 1) fill = p.light;       // hair: use light color for visibility
-        else if (v === 2) fill = p.skin;    // skin
-        else if (v === 3) {
-          // eyes
-          if (c === 3 && f.eyes[0]) fill = '#111';
-          else if (c === 4 && f.eyes[1]) fill = '#111';
-          else if (c === 5 && f.eyes[2]) fill = '#111';
-          else if (c === 6 && f.eyes[3]) fill = '#111';
-          else fill = p.skin;
-        }
-        else if (v === 4) {
-          // mouth
-          const mi = c - 4;
-          fill = (f.mouth && mi >= 0 && mi < f.mouth.length && f.mouth[mi]) ? '#111' : p.skin;
-        }
-        else if (v === 5) fill = p.mid;     // body
-
-        if (fill) {
-          ctx.fillStyle = fill;
-          ctx.fillRect(x + c * scale, y + r * scale, scale, scale);
-        }
-      }
-    }
-  }
-
-  _face(mood) {
-    const patterns = {
-      confident: { eyes: [0,1,1,0], mouth: [0,1,1,0,0,0] },
-      calm:     { eyes: [0,1,0,0], mouth: [0,0,1,1,0,0] },
-      worried:  { eyes: [1,1,1,1], mouth: [1,0,0,0,0,1] },
-      excited:  { eyes: [1,1,1,1], mouth: [0,1,1,1,1,0] },
-      panicked: { eyes: [1,1,1,1], mouth: [1,1,1,1,1,1] },
-    };
-    return patterns[mood] || patterns.calm;
   }
 
   _makePal(hex) {
@@ -653,9 +606,4 @@ class TownMap {
     return `rgb(${Math.floor(r*(1-f))},${Math.floor(g*(1-f))},${Math.floor(b*(1-f))})`;
   }
 
-  _seed(id) {
-    let h = 0;
-    for (let i = 0; i < id.length; i++) h = ((h << 5) - h) + id.charCodeAt(i);
-    return Math.abs(h);
-  }
 }
