@@ -147,10 +147,10 @@ class TownMap {
 
   _renderFrame() {
     this._drawMap();
+    this._drawDayNightOverlay();  // darken the world first
     this._drawConversations();
     this._drawWeather();
-    this._drawAgents();
-    this._drawDayNightOverlay();
+    this._drawAgents();           // agents ALWAYS on top, full brightness
   }
 
   // ── Map tiles ───────────────────────────────────────────────
@@ -371,13 +371,20 @@ class TownMap {
       ctx.fillStyle = glow;
       ctx.fillRect(cx - 14, cy - 14, 28, 28);
 
-      // Pixel sprite, 2x scale for visibility
-      const SPRITE_W = 10, SPRITE_H = 8, SCALE = 2;
+      // Pixel sprite, 3x scale, bright background + white outline
+      const SPRITE_W = 10, SPRITE_H = 8, SCALE = 3;
       const sx = cx - (SPRITE_W * SCALE) / 2;
       const sy = cy - (SPRITE_H * SCALE) / 2 - 2;
-      // Background plate for contrast
-      ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.fillRect(sx - 1, sy - 1, SPRITE_W * SCALE + 2, SPRITE_H * SCALE + 2);
+      // White outline surround for max contrast
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(sx - 2, sy - 2, SPRITE_W * SCALE + 4, SPRITE_H * SCALE + 4);
+      // Bright plate
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillRect(sx - 2, sy - 2, SPRITE_W * SCALE + 4, SPRITE_H * SCALE + 4);
+      // Dark inner plate
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(sx, sy, SPRITE_W * SCALE, SPRITE_H * SCALE);
       this._drawAgentSprite(ctx, sx, sy, a.mood || 'calm', a.color || '#888', id, SCALE);
 
       // Highlight ring
@@ -389,10 +396,11 @@ class TownMap {
       }
 
       // ID label
+      const labelY = sy + SPRITE_H * SCALE + 12;
       ctx.fillStyle = '#fff';
       ctx.font = '5px "Press Start 2P"';
       ctx.textAlign = 'center';
-      ctx.fillText(id, cx, cy + 18);
+      ctx.fillText(id, cx, labelY);
 
       // Moving dots
       if (a.isMoving) {
@@ -400,7 +408,7 @@ class TownMap {
         for (let i = 0; i < 3; i++) {
           const alpha = phase > i * 6 ? 1 : 0.3;
           ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-          ctx.fillRect(cx - 4 + i * 4, cy + 21, 2, 2);
+          ctx.fillRect(cx - 4 + i * 4, labelY + 4, 2, 2);
         }
       }
     }
