@@ -47,15 +47,11 @@ Real stock bars  ──forced projection──→  🏪 Town Market
 
 ---
 
-## 🖥️ Screenshot
+## 🎬 Demo
 
-> _Add a screenshot here after running the simulation:_
-> 1. `python run.py` → http://localhost:8765 → click START
-> 2. Wait 30 seconds for the map to fill with activity
-> 3. Screenshot: `Win+Shift+S` (Windows) or `Cmd+Shift+4` (macOS)
-> 4. Save as `docs/screenshot.png` and update the path below
+[![Agent Street Demo](docs/screenshot.mp4)](docs/screenshot.mp4)
 
-![Agent Street Screenshot](docs/screenshot.png)
+> _Click the thumbnail above to watch the demo. 16 MBTI agents trading, chatting, and moving through Agent Street in real-time._
 
 ## 🗺️ Town Map
 
