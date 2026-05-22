@@ -7,82 +7,75 @@ class Leaderboard {
     this.colors = {};
   }
 
-  setColors(colors) {
-    this.colors = colors;
-  }
+  setColors(colors) { this.colors = colors; }
 
   update(states) {
-    this.personas = states
-      .map(s => ({ ...s }))
-      .sort((a, b) => b.pnl - a.pnl);
+    this.personas = states.map(s => ({ ...s })).sort((a, b) => b.pnl - a.pnl);
     this.render();
   }
 
   render() {
     const ctx = this.ctx;
     const w = this.canvas.width;
-    const h = this.canvas.height;
-    ctx.clearRect(0, 0, w, h);
-
+    ctx.clearRect(0, 0, w, this.canvas.height);
     if (this.personas.length === 0) return;
 
     const rowH = 20;
-    const nameW = 50;    // width for rank + ID
-    const pnlW = 54;     // width for PnL text
-    const barX = nameW;
-    const maxBarW = w - nameW - pnlW - 4;
-    const startY = 6;
+    const pad = 4;
+    const barL = 46;  // bar left edge (after rank+id)
+    const barR = w - 4;  // bar right edge (leaves margin)
+    const barMax = barR - barL;
+    const maxAbs = Math.max(Math.abs(this.personas[0]?.pnl || 1), 0.01);
 
     this.personas.forEach((p, i) => {
-      const y = startY + i * rowH;
-      if (y + rowH > h) return;
-
+      const y = 6 + i * rowH;
+      if (y + rowH > this.canvas.height) return;
       const pnl = p.pnl || 0;
-      const pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(0);
-      const isPositive = pnl >= 0;
+      const isPos = pnl >= 0;
 
-      // Row background (subtle zebra)
-      ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.1)';
+      // Row bg
+      ctx.fillStyle = i % 2 ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.02)';
       ctx.fillRect(0, y, w, rowH);
 
       // Rank
-      ctx.fillStyle = i < 3 ? '#f0c040' : '#888';
+      ctx.fillStyle = i < 3 ? '#f0c040' : '#666';
       ctx.font = '6px "Press Start 2P"';
       ctx.textAlign = 'left';
-      ctx.fillText(String(i + 1).padStart(2, '0'), 2, y + 12);
+      ctx.fillText(String(i + 1).padStart(2, '0'), pad, y + 13);
 
-      // Agent ID
-      ctx.fillStyle = this.colors[p.id] || '#e0e0e0';
-      ctx.fillText(p.id, 18, y + 12);
+      // ID
+      ctx.fillStyle = this.colors[p.id] || '#ccc';
+      ctx.fillText(p.id, 17, y + 13);
 
-      // P&L bar background
-      const barH = 10;
-      const barY = y + 4;
-      const maxAbs = Math.max(Math.abs(this.personas[0]?.pnl || 1), 1);
-      let barW = Math.floor((Math.abs(pnl) / maxAbs) * maxBarW);
-      if (barW < 2 && Math.abs(pnl) > 0.01) barW = 2; // minimum visible bar
+      // Bar track
+      const barY = y + 5;
+      const barH = 8;
+      ctx.fillStyle = '#111';
+      ctx.fillRect(barL, barY, barMax, barH);
 
-      ctx.fillStyle = '#1a1a30';
-      ctx.fillRect(barX, barY, maxBarW, barH);
-
-      // P&L bar fill
-      if (isPositive) {
+      // Bar fill — clamped
+      const wPct = Math.min(1, Math.abs(pnl) / maxAbs);
+      const barW = Math.max(1, Math.floor(wPct * barMax));
+      if (isPos) {
         ctx.fillStyle = '#4ecca3';
-        ctx.fillRect(barX, barY, barW, barH);
+        ctx.fillRect(barL, barY, barW, barH);
       } else {
+        // Negative: right-aligned from barR, never goes past barR - barMax
+        const x = barR - barW;
         ctx.fillStyle = '#e94560';
-        ctx.fillRect(barX + maxBarW - barW, barY, barW, barH);
+        ctx.fillRect(x, barY, barW, barH);
       }
 
-      // P&L text — drawn AFTER bar, outside bar area, in its own column
-      ctx.fillStyle = isPositive ? '#4ecca3' : '#e94560';
-      ctx.font = '6px "Press Start 2P"';
+      // PnL value INSIDE the bar
+      const pnlStr = (pnl >= 0 ? '+' : '') + Math.abs(pnl).toFixed(0);
+      ctx.fillStyle = '#fff';
+      ctx.font = '5px "Press Start 2P"';
       ctx.textAlign = 'right';
-      ctx.fillText(pnlStr, w - 2, y + 12);
-
-      // Divider
-      ctx.fillStyle = 'rgba(255,255,255,0.04)';
-      ctx.fillRect(0, y + rowH - 1, w, 1);
+      if (isPos) {
+        ctx.fillText('$' + pnlStr, barL + barW - 3, y + 13);
+      } else {
+        ctx.fillText('-$' + Math.abs(pnl).toFixed(0), barR - 3, y + 13);
+      }
     });
   }
 }

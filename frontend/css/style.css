@@ -188,7 +188,7 @@ body {
   border: 2px solid var(--border);
   padding: 6px;
   min-height: 50px;
-  max-height: 140px;
+  max-height: 180px;
   overflow-y: auto;
   display: flex;
   gap: 6px;
@@ -244,7 +244,7 @@ body {
 #trade-feed-panel { margin-bottom: 6px; }
 
 #trade-feed {
-  height: 64px;
+  height: 112px;
   overflow-y: auto;
   background: var(--panel-bg);
   border: 2px solid var(--border);
