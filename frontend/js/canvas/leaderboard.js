@@ -8,7 +8,7 @@ class Leaderboard {
   }
 
   setColors(colors) {
-    this.colors = colors; // id -> color hex
+    this.colors = colors;
   }
 
   update(states) {
@@ -26,45 +26,63 @@ class Leaderboard {
 
     if (this.personas.length === 0) return;
 
-    const barH = 16;
-    const gap = 3;
-    const startY = 10;
-    const maxBarW = w - 65;
+    const rowH = 20;
+    const nameW = 50;    // width for rank + ID
+    const pnlW = 54;     // width for PnL text
+    const barX = nameW;
+    const maxBarW = w - nameW - pnlW - 4;
+    const startY = 6;
 
     this.personas.forEach((p, i) => {
-      const y = startY + i * (barH + gap);
-      if (y + barH > h) return;
+      const y = startY + i * rowH;
+      if (y + rowH > h) return;
+
+      const pnl = p.pnl || 0;
+      const pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(0);
+      const isPositive = pnl >= 0;
+
+      // Row background (subtle zebra)
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.1)';
+      ctx.fillRect(0, y, w, rowH);
 
       // Rank
-      ctx.fillStyle = '#888';
+      ctx.fillStyle = i < 3 ? '#f0c040' : '#888';
       ctx.font = '6px "Press Start 2P"';
       ctx.textAlign = 'left';
-      ctx.fillText((i + 1).toString().padStart(2, '0'), 2, y + 11);
+      ctx.fillText(String(i + 1).padStart(2, '0'), 2, y + 12);
 
-      // Name
-      ctx.fillStyle = '#e0e0e0';
-      ctx.fillText(p.id, 18, y + 11);
+      // Agent ID
+      ctx.fillStyle = this.colors[p.id] || '#e0e0e0';
+      ctx.fillText(p.id, 18, y + 12);
 
       // P&L bar background
-      const barX = 52;
+      const barH = 10;
+      const barY = y + 4;
+      const maxAbs = Math.max(Math.abs(this.personas[0]?.pnl || 1), 1);
+      let barW = Math.floor((Math.abs(pnl) / maxAbs) * maxBarW);
+      if (barW < 2 && Math.abs(pnl) > 0.01) barW = 2; // minimum visible bar
+
       ctx.fillStyle = '#1a1a30';
-      ctx.fillRect(barX, y + 4, maxBarW, 10);
+      ctx.fillRect(barX, barY, maxBarW, barH);
 
       // P&L bar fill
-      const maxAbsPnl = Math.max(Math.abs(this.personas[0]?.pnl || 1), 1);
-      const barW = Math.min(maxBarW, (Math.abs(p.pnl) / maxAbsPnl) * maxBarW);
-      ctx.fillStyle = p.pnl >= 0 ? '#4ecca3' : '#e94560';
-      if (p.pnl >= 0) {
-        ctx.fillRect(barX, y + 4, barW, 10);
+      if (isPositive) {
+        ctx.fillStyle = '#4ecca3';
+        ctx.fillRect(barX, barY, barW, barH);
       } else {
-        ctx.fillRect(barX + maxBarW - barW, y + 4, barW, 10);
+        ctx.fillStyle = '#e94560';
+        ctx.fillRect(barX + maxBarW - barW, barY, barW, barH);
       }
 
-      // P&L text
-      ctx.fillStyle = p.pnl >= 0 ? '#4ecca3' : '#e94560';
+      // P&L text — drawn AFTER bar, outside bar area, in its own column
+      ctx.fillStyle = isPositive ? '#4ecca3' : '#e94560';
+      ctx.font = '6px "Press Start 2P"';
       ctx.textAlign = 'right';
-      const pnlStr = (p.pnl >= 0 ? '+' : '') + p.pnl.toFixed(0);
-      ctx.fillText(pnlStr, w - 2, y + 11);
+      ctx.fillText(pnlStr, w - 2, y + 12);
+
+      // Divider
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      ctx.fillRect(0, y + rowH - 1, w, 1);
     });
   }
 }

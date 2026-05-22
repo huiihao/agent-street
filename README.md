@@ -47,6 +47,45 @@ Real stock bars  ──forced projection──→  🏪 Town Market
 
 ---
 
+## 🖥️ Screenshot
+
+> _Add a screenshot here after running the simulation:_
+> 1. `python run.py` → http://localhost:8765 → click START
+> 2. Wait 30 seconds for the map to fill with activity
+> 3. Screenshot: `Win+Shift+S` (Windows) or `Cmd+Shift+4` (macOS)
+> 4. Save as `docs/screenshot.png` and update the path below
+
+![Agent Street Screenshot](docs/screenshot.png)
+
+## 🗺️ Town Map
+
+```
+Actual 20x14 tile map generated from backend/models/town.py:
+
+Legend:  . grass  = road  | road_v  # building  * tree  ~ water  : sidewalk
+
+***..............***
+*..................*
+..###...###...###...
+..###...###...###...
+::::::::::::::::::::
+....................
+..##....###....##...
+..##....###....##...
+::::::::::::::::::::
+...*....~~....*....
+...*....~~....*....
+::::::::::::::::::::
+........###.........
+.**..*..###..*..**..
+
+Locations:
+  Blue Roof House (2,2)    Red Roof House (9,2)   Green Roof House (14,2)
+  Yellow Roof House (2,6)  Morning Brew Cafe (9,6) Data Library (15,6)
+  Trading Floor (2,9)      Willow Park (9,9)       Town Square (9,12)
+  Observatory (17,10)       Math Tower (18,2)       Fortune Tent (1,11)
+```
+
 ## 🖥️ Interface
 
 <table>
