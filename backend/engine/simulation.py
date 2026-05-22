@@ -16,6 +16,7 @@ from backend.engine.memory_system import AgentMemory
 from backend.engine.daily_routine import DailyRoutine
 from backend.engine.conversation import ConversationSystem
 from backend.engine.observer_engine import ObserverEngine
+from backend.engine.influence_network import InfluenceNetwork, apply_environment
 
 
 class SimulationLoop:
@@ -28,6 +29,7 @@ class SimulationLoop:
         self.market = HistoricalDataProvider(SYMBOLS)
         self.decision_engine = PersonaDecisionEngine()
         self.observer_engine = ObserverEngine()
+        self.influence_network = InfluenceNetwork()
         self._speed_multiplier = 1.0
         self.matching_engine = MatchingEngine(strict=False)
         # Generative Agents systems
@@ -106,7 +108,28 @@ class SimulationLoop:
                 for ref in new_refs:
                     memory.observe(ref.content, "reflection", ref.confidence, self.tick)
 
-        # 3. Conversations between nearby agents
+        # 3. Influence network: decay + connect to decision engine
+        self.influence_network.decay(self.tick)
+        self.decision_engine.influence = self.influence_network
+
+        # 3.5 Parse world hour for time-of-day effects
+        world_hour = 12
+        try:
+            for symbol in SYMBOLS:
+                bars = self.market._bars.get(symbol, [])
+                if bars:
+                    idx = (self.market._bar_index - 1) % len(bars)
+                    t = bars[idx].get("time")
+                    if hasattr(t, "hour"):
+                        world_hour = t.hour + t.minute / 60
+                        break
+        except Exception:
+            pass
+
+        # Rain check (same heuristic as frontend)
+        is_raining = ((int(world_hour * 7) % 10) < 2)
+
+        # 4. Conversations between nearby agents
         active_conversations = []
         for pid, traits_def in PERSONA_DEFINITIONS.items():
             if pid not in self.personas:
@@ -141,20 +164,27 @@ class SimulationLoop:
                             "conversation", 0.4 + abs(turn.sentiment_effect),
                             self.tick,
                         )
+                # Record in trust network
+                self.influence_network.record_conversation(conv.participants, self.tick)
 
-        # 4. Agent trading decisions
+        # 5. Agent trading decisions with environment-modified params
         all_intents = []
         for pid, persona in self.personas.items():
             defn = PERSONA_DEFINITIONS.get(pid)
             if not defn:
                 continue
+            routine = self.routines.get(pid)
+            loc_id = routine.current_location_id() if routine else "home_nw"
+            env_params = apply_environment(
+                defn["params"], loc_id, world_hour, is_raining,
+            )
             intents = self.decision_engine.decide(
-                persona, defn["params"], prices, changes,
+                persona, env_params, defn["params"], prices, changes,
                 self.personas, self.tick,
             )
             all_intents.extend(intents)
 
-        # 5. Matching engine
+        # 6. Matching engine
         trades, self.house_cash, self.house_holdings = self.matching_engine.match(
             all_intents, prices, self.personas,
             self.house_cash, self.house_holdings,
@@ -165,10 +195,10 @@ class SimulationLoop:
             if persona:
                 persona.trade_history.append(t)
 
-        # 6. Current world time from the bar data
+        # 7. Current world time from the bar data
         world_time = self._get_world_time()
 
-        # 7. Build frame with town data
+        # 8. Build frame with town data
         snapshots = self._build_snapshots(prices)
         trade_records = [
             TradeRecord.from_executed(t, PERSONA_DEFINITIONS.get(t.persona_id, {}).get("name", ""))
@@ -183,7 +213,7 @@ class SimulationLoop:
             for c in active_conversations
         ]
 
-        # 7. Observer reports
+        # 9. Observer reports
         sentiment = self._compute_sentiment(prices)
         report_records = []
         for obs_id in ("physicist", "mathematician", "mystic"):

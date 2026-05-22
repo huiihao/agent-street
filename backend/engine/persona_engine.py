@@ -8,8 +8,8 @@ from backend.config import BUY_THRESHOLD, SELL_THRESHOLD, SYMBOLS
 class PersonaDecisionEngine:
     def __init__(self):
         self._signal_memory: dict[str, dict[str, list[float]]] = {}
-        # Track per-agent memories
         self.memories: dict[str, AgentMemory] = {}
+        self.influence: "InfluenceNetwork | None" = None  # set by simulation
 
     def register_memory(self, agent_id: str, memory: AgentMemory):
         self.memories[agent_id] = memory
@@ -17,7 +17,8 @@ class PersonaDecisionEngine:
     def decide(
         self,
         persona: PersonaState,
-        params: TradingParams,
+        params: TradingParams,          # environment-modified params
+        base_params: TradingParams | None,  # original params for reference
         prices: dict[str, float],
         changes: dict[str, float],
         all_states: dict[str, PersonaState],
@@ -34,6 +35,13 @@ class PersonaDecisionEngine:
 
         # Compute aggregate herding signal
         herding_signal = self._compute_herding(all_states, persona.persona_id)
+
+        # Trust-weighted influence from agent coupling network
+        influence_signal = 0.0
+        if self.influence:
+            influence_signal = self.influence.influence_signal(
+                persona.persona_id, self.memories, prices,
+            )
 
         # Panic check — also considers memory sentiment
         portfolio_val = persona.portfolio_value(prices)
@@ -71,7 +79,7 @@ class PersonaDecisionEngine:
             # Weighted composite score — now includes memory sentiment
             contrarian_adj = momentum * (1 - params.contrarianism) - momentum * params.contrarianism
             tech_signal = contrarian_adj * 0.6 + (1 - volatility / max(price * 0.1, 0.01)) * 0.4
-            social_signal = (herding_signal + memory_sentiment) / 2 * params.herding_weight
+            social_signal = (herding_signal * 0.4 + influence_signal * 0.4 + memory_sentiment * 0.2) * params.herding_weight
             composite = params.tech_weight * tech_signal + (1 - params.tech_weight) * social_signal
 
             # Price change observation

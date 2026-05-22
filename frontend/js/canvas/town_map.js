@@ -357,17 +357,14 @@ class TownMap {
 
   _drawAgents() {
     const ctx = this.ctx;
-    // Track drawn positions to offset stacked agents
     const posCount = {};
 
-    // ── DIAGNOSTIC: show agent count + data check ──
+    // Diagnostic (small, dim)
     const count = Object.keys(this.agents).length;
-    const sample = Object.entries(this.agents).slice(0, 5);
-    const sampleStr = sample.map(([id, a]) => `${id}@(${Math.round(a.tileX||0)},${Math.round(a.tileY||0)})`).join(' ');
-    ctx.fillStyle = '#0f0';
-    ctx.font = '8px monospace';
+    ctx.fillStyle = 'rgba(0,255,0,0.4)';
+    ctx.font = '7px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`AGENTS:${count} | ${sampleStr}`, 4, this.canvas.height - 4);
+    ctx.fillText(`AGENTS:${count}`, 4, this.canvas.height - 4);
 
     for (const [id, a] of Object.entries(this.agents)) {
       const tx = Math.round(a.tileX);
@@ -376,70 +373,217 @@ class TownMap {
       const stackIdx = posCount[key] || 0;
       posCount[key] = stackIdx + 1;
 
-      // Offset stacked agents so they don't fully overlap
-      const offX = (stackIdx % 2) * 6 - 3;
-      const offY = Math.floor(stackIdx / 2) * 6 - 3;
+      const offX = (stackIdx % 2) * 7 - 3;
+      const offY = Math.floor(stackIdx / 2) * 7 - 3;
       const cx = tx * TILE_PX + TILE_PX / 2 + offX;
       const cy = ty * TILE_PX + TILE_PX / 2 + offY;
       const isSelected = this.selectedAgent === id;
       const isHovered = this.hoveredAgent === id;
-
-      // ── Bold colored body (10x12 px at 1:1, impossible to miss) ──
-      ctx.fillStyle = a.color || '#888';
-      ctx.fillRect(cx - 5, cy - 6, 10, 12);
-
-      // Hair (darker top)
-      ctx.fillStyle = this._darken(a.color || '#888', 0.4);
-      ctx.fillRect(cx - 5, cy - 6, 10, 4);
-
-      // Face (skin tone rectangle)
-      ctx.fillStyle = '#F5D0A9';
-      ctx.fillRect(cx - 3, cy - 1, 6, 4);
-
-      // Eyes (two black dots)
-      ctx.fillStyle = '#111';
-      ctx.fillRect(cx - 2, cy, 1, 1);
-      ctx.fillRect(cx + 1, cy, 1, 1);
-
-      // Mood mouth
-      const mouths = { confident: '—', calm: '–', worried: 'o', excited: 'D', panicked: '□' };
-      const mouth = mouths[a.mood] || '–';
-      ctx.font = '4px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#111';
-      ctx.fillText(mouth, cx, cy + 3);
-
-      // ── White outline ──
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(cx - 6, cy - 7, 12, 14);
-
-      // ── Selection highlight ──
-      if (isHovered || isSelected) {
-        ctx.strokeStyle = isSelected ? '#f0c040' : 'rgba(255,255,255,0.9)';
-        ctx.lineWidth = isSelected ? 3 : 1;
-        ctx.strokeRect(cx - 8, cy - 9, 16, 18);
-      }
+      const isObserver = ['physicist','mathematician','mystic'].includes(id);
 
       // ── Shadow ──
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.fillRect(cx - 4, cy + 6, 8, 3);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(cx - 6, cy + 7, 12, 3);
+
+      // ── Body sprite (2x scale, 8x12 source → 16x24 pixels) ──
+      if (isObserver) {
+        this._drawObserverSprite(ctx, cx, cy, id, a.mood);
+      } else {
+        this._drawTraderSprite(ctx, cx, cy, id, a.mood, a.color, this._animFrame);
+      }
 
       // ── ID label ──
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 6px monospace';
+      ctx.fillStyle = isObserver ? '#ccc' : '#fff';
+      ctx.font = isObserver ? '5px monospace' : 'bold 6px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(id, cx, cy + 16);
+      ctx.fillText(isObserver ? id.slice(0,4)+'..' : id, cx, cy + 16);
+
+      // ── Selection ──
+      if (isHovered || isSelected) {
+        ctx.strokeStyle = isSelected ? '#f0c040' : 'rgba(255,255,255,0.7)';
+        ctx.lineWidth = isSelected ? 2 : 1;
+        ctx.setLineDash([2, 2]);
+        ctx.strokeRect(cx - 9, cy - 14, 18, 32);
+        ctx.setLineDash([]);
+      }
 
       // ── Moving dots ──
-      if (a.isMoving) {
+      if (a.isMoving && !isObserver) {
         const phase = this._animFrame % 20;
         for (let i = 0; i < 3; i++) {
-          ctx.fillStyle = `rgba(255,255,255,${phase > i * 6 ? 1 : 0.3})`;
+          ctx.fillStyle = `rgba(255,255,255,${phase > i * 6 ? 1 : 0.2})`;
           ctx.fillRect(cx - 4 + i * 4, cy + 18, 2, 2);
         }
       }
     }
+  }
+
+  // ── Trader sprite: detailed pixel character ────────────────
+
+  _drawTraderSprite(ctx, cx, cy, id, mood, color, frame) {
+    const SC = 2; // 2x scale
+    // Determine body type from MBTI: NT=tall, NF=round, ST=square, SF=wide
+    const typeGroup = this._mbtiGroup(id);
+
+    // ── Legs (bobbing while moving) ──
+    const bob = Math.sin(frame * 0.3) * (1.5);
+    ctx.fillStyle = this._darken(color, 0.3);
+    ctx.fillRect(cx - 3 * SC, cy + 5 * SC, 2 * SC, 3 * SC);
+    ctx.fillRect(cx + 1 * SC, cy + 5 * SC, 2 * SC, 3 * SC);
+    // Feet
+    ctx.fillStyle = '#222';
+    ctx.fillRect(cx - 4 * SC, cy + 8 * SC, 3 * SC, 1 * SC);
+    ctx.fillRect(cx + 1 * SC, cy + 8 * SC, 3 * SC, 1 * SC);
+
+    // ── Body ──
+    const bodyW = typeGroup === 'SF' ? 8 : typeGroup === 'NF' ? 7 : 6;
+    const bodyH = typeGroup === 'NT' ? 7 : 6;
+    const bodyX = cx - (bodyW / 2) * SC;
+    const bodyY = cy - 2 * SC;
+    ctx.fillStyle = color;
+    ctx.fillRect(bodyX, bodyY, bodyW * SC, bodyH * SC);
+
+    // Body detail (belt/buttons for ST/NT, scarf for NF)
+    if (typeGroup === 'ST' || typeGroup === 'NT') {
+      ctx.fillStyle = this._darken(color, 0.2);
+      ctx.fillRect(bodyX + 1, bodyY + 3 * SC, (bodyW - 2) * SC, 1 * SC); // belt
+    }
+    if (typeGroup === 'NF') {
+      ctx.fillStyle = this._lighten(color, 0.3);
+      ctx.fillRect(bodyX, bodyY, bodyW * SC, 1 * SC); // scarf/collar
+    }
+    if (typeGroup === 'SF') {
+      ctx.fillStyle = this._lighten(color, 0.2);
+      ctx.fillRect(bodyX + bodyW * SC - 2 * SC, bodyY, 2 * SC, 2 * SC); // pocket
+    }
+
+    // ── Arms ──
+    ctx.fillStyle = this._darken(color, 0.15);
+    ctx.fillRect(bodyX - 1 * SC, bodyY + 1 * SC, 1 * SC, 3 * SC);
+    ctx.fillRect(bodyX + bodyW * SC, bodyY + 1 * SC, 1 * SC, 3 * SC);
+
+    // ── Head ──
+    ctx.fillStyle = '#F5D0A9';
+    ctx.fillRect(cx - 3 * SC, cy - 8 * SC + bob, 6 * SC, 5 * SC);
+
+    // ── Hair ──
+    ctx.fillStyle = this._darken(color, 0.35);
+    const hairStyle = this._hairStyle(id);
+    for (const [hx, hy] of hairStyle) {
+      ctx.fillRect(cx + hx * SC, cy - 8 * SC + bob + hy * SC, SC, SC);
+    }
+
+    // ── Eyes ──
+    const eyes = {
+      confident: [[-1,0],[1,0]], calm: [[-1,0],[0,0]], worried: [[-2,0],[1,0]],
+      excited: [[-2,-1],[1,-1]], panicked: [[-2,0],[2,0]],
+    };
+    const ep = eyes[mood] || eyes.calm;
+    ctx.fillStyle = '#111';
+    for (const [ex, ey] of ep) {
+      ctx.fillRect(cx + ex * SC, cy - 5 * SC + bob + ey * SC, 1 * SC, 1 * SC);
+    }
+
+    // ── Mouth ──
+    const mouths = {
+      confident: [0,1,0], calm: [0,0,1], worried: [-1,1,1], excited: [1,1,1], panicked: [0,2,2],
+    };
+    const mp = mouths[mood] || mouths.calm;
+    ctx.fillStyle = '#111';
+    ctx.fillRect(cx - mp[2] * SC / 2, cy - 2 * SC + bob + mp[1] * SC, Math.max(1, mp[2] * SC), 1 * SC);
+    if (mp[0] < 0) {
+      ctx.fillRect(cx - 2 * SC, cy - 3 * SC + bob, 1 * SC, 1 * SC);
+    }
+    if (mp[0] > 0) {
+      ctx.fillRect(cx + 1 * SC, cy - 3 * SC + bob, 1 * SC, 1 * SC);
+    }
+
+    // ── White outline ──
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(bodyX - 1, bodyY - 1, bodyW * SC + 2, bodyH * SC + 2);
+    // Head outline
+    ctx.strokeRect(cx - 4 * SC, cy - 9 * SC + bob, 8 * SC, 6 * SC);
+  }
+
+  // ── Observer sprite: distinctive shapes ────────────────────
+  _drawObserverSprite(ctx, cx, cy, id, mood) {
+    const SC = 2;
+    if (id === 'physicist') {
+      // Telescope on tripod
+      ctx.fillStyle = '#3A3A5A';
+      ctx.fillRect(cx - 1, cy - 4, 2, 8); // body
+      ctx.fillStyle = '#7B9ECF';
+      ctx.fillRect(cx - 3, cy - 6, 2, 3); ctx.fillRect(cx + 1, cy - 6, 2, 3); // coat
+      ctx.fillStyle = '#F5D0A9';
+      ctx.fillRect(cx - 2, cy - 7, 4, 3); // head (looking at telescope)
+      ctx.fillStyle = '#111';
+      ctx.fillRect(cx - 1, cy - 6, 1, 1); ctx.fillRect(cx + 0, cy - 6, 1, 1); // eyes
+    } else if (id === 'mathematician') {
+      // Chalkboard with equations
+      ctx.fillStyle = '#4A4A6A';
+      ctx.fillRect(cx - 4, cy - 3, 8, 1); // board
+      ctx.fillStyle = '#9E7BCF';
+      ctx.fillRect(cx - 1, cy - 5, 2, 6); // body
+      ctx.fillStyle = '#F5D0A9';
+      ctx.fillRect(cx - 2, cy - 7, 4, 3); // head
+      ctx.fillStyle = '#111';
+      ctx.fillRect(cx - 1, cy - 6, 1, 1); ctx.fillRect(cx + 0, cy - 6, 1, 1);
+      // equations on board
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(cx - 2, cy - 2, 4, 1);
+    } else if (id === 'mystic') {
+      // Crystal ball on table
+      ctx.fillStyle = '#6A3A6A';
+      ctx.fillRect(cx - 3, cy - 2, 6, 6); // table
+      ctx.fillStyle = 'rgba(207,123,174,0.6)';
+      ctx.beginPath(); ctx.arc(cx, cy - 2, 4, 0, Math.PI * 2); ctx.fill(); // ball
+      ctx.fillStyle = '#CF7BAE';
+      ctx.fillRect(cx - 1, cy - 6, 2, 4); // body
+      ctx.fillStyle = '#F5D0A9';
+      ctx.fillRect(cx - 2, cy - 8, 4, 3); // head
+      ctx.fillStyle = '#111';
+      ctx.fillRect(cx - 1, cy - 7, 1, 1); ctx.fillRect(cx + 0, cy - 7, 1, 1);
+    }
+  }
+
+  // ── MBTI group classification ──────────────────────────────
+
+  _mbtiGroup(id) {
+    const nt = ['INTJ','INTP','ENTJ','ENTP'];
+    const nf = ['INFJ','INFP','ENFJ','ENFP'];
+    const st = ['ISTJ','ISTP','ESTJ','ESTP'];
+    const sf = ['ISFJ','ISFP','ESFJ','ESFP'];
+    if (nt.includes(id)) return 'NT';
+    if (nf.includes(id)) return 'NF';
+    if (st.includes(id)) return 'ST';
+    if (sf.includes(id)) return 'SF';
+    return 'NT';
+  }
+
+  _hairStyle(id) {
+    const g = this._mbtiGroup(id);
+    const seed = id.charCodeAt(0) + id.charCodeAt(2);
+    if (g === 'NT') {
+      // Short, angular
+      return [[-2,0],[-1,-1],[0,-1],[1,-1],[2,0]];
+    } else if (g === 'NF') {
+      // Fluffy, wider
+      return [[-3,0],[-2,-1],[-1,-2],[0,-2],[1,-2],[2,-1],[3,0]];
+    } else if (g === 'ST') {
+      // Flat, practical
+      return [[-2,0],[-1,-1],[0,-1],[1,-1],[2,0]];
+    } else {
+      // Wavy
+      return [[-2,-1],[-1,-1],[0,-2],[1,-1],[2,-1],[1,0],[-1,0]];
+    }
+  }
+
+  _lighten(hex, f) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgb(${Math.min(255,Math.floor(r+r*f))},${Math.min(255,Math.floor(g+g*f))},${Math.min(255,Math.floor(b+b*f))})`;
   }
 
   _makePal(hex) {
