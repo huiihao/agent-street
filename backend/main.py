@@ -151,7 +151,10 @@ async def websocket_endpoint(ws: WebSocket):
                 sim.tick = 0
                 sim.house_cash = 0.0
                 sim.house_holdings = {s: 0 for s in SYMBOLS}
-            await ws_manager.broadcast({"type": "sim_state", "data": {"running": sim.running if sim else False}})
+            await ws_manager.broadcast({"type": "sim_state", "data": {
+                "running": sim.running if sim else False,
+                "speed": sim._speed_multiplier if sim else 1,
+            }})
     except WebSocketDisconnect:
         ws_manager.disconnect(ws)
 

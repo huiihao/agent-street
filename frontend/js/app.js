@@ -93,6 +93,10 @@
     btnStop.disabled = !running;
     stSim.textContent = 'SIM: ' + (running ? 'RUNNING' : 'STOPPED');
     stSim.className = running ? 'running' : 'stopped';
+    if (data.speed) {
+      const s = data.speed;
+      stSpeed.textContent = s >= 20 ? 'MAX' : s + 'x';
+    }
   });
 
   ws.on('connection', (connected) => {

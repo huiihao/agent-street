@@ -1,86 +1,53 @@
-// Observer Reports — renders reports from Physicist, Mathematician, Mystic
+// Observer Reports — side-by-side layout, newest report per observer
 
 class ObserverReports {
   constructor(containerId) {
     this.container = document.getElementById(containerId);
-    this.reports = []; // newest first
+    this.latest = {}; // observerId -> report
   }
 
   append(reports) {
     if (!reports || reports.length === 0) return;
-
-    reports.forEach(r => {
-      this.reports.unshift(r);
-    });
-
-    // Keep last 30
-    if (this.reports.length > 30) {
-      this.reports = this.reports.slice(0, 30);
+    for (const r of reports) {
+      this.latest[r.observerId] = r;
     }
-
     this.render();
   }
 
   render() {
-    if (this.reports.length === 0) return;
+    const icons = { physicist: '🔭', mathematician: '📐', mystic: '🔮' };
+    const names = { physicist: 'Physicist', mathematician: 'Mathematician', mystic: 'Mystic' };
+    const colors = { physicist: '#7B9ECF', mathematician: '#9E7BCF', mystic: '#CF7BAE' };
+    const order = ['physicist', 'mathematician', 'mystic'];
 
-    const obsIcons = {
-      physicist: '🔭',
-      mathematician: '📐',
-      mystic: '🔮',
-    };
+    let html = '';
+    for (const oid of order) {
+      const r = this.latest[oid];
+      if (!r) continue;
 
-    const obsNames = {
-      physicist: 'Physicist',
-      mathematician: 'Mathematician',
-      mystic: 'Mystic',
-    };
-
-    const obsColors = {
-      physicist: '#7B9ECF',
-      mathematician: '#9E7BCF',
-      mystic: '#CF7BAE',
-    };
-
-    this.container.innerHTML = this.reports.slice(0, 5).map(r => {
-      const icon = obsIcons[r.observerId] || '•';
-      const name = obsNames[r.observerId] || r.observerId;
-      const color = obsColors[r.observerId] || '#888';
-      const confidenceBar = this._confidenceBar(r.confidence || 0.5, r.observerId);
-
-      return `
-        <div class="obs-report" style="border-left: 3px solid ${color}">
+      html += `
+        <div class="obs-report" style="border-top-color:${colors[oid]}">
           <div class="obs-header">
-            <span class="obs-icon">${icon}</span>
-            <span class="obs-name" style="color:${color}">${name}</span>
+            <span class="obs-icon">${icons[oid]}</span>
+            <span class="obs-name" style="color:${colors[oid]}">${names[oid]}</span>
             <span class="obs-tick">T+${r.tick}</span>
-            ${confidenceBar}
+            <span class="obs-confidence" style="color:${r.confidence > 0.5 ? '#4ecca3' : '#888'}">${Math.round(r.confidence*100)}%</span>
           </div>
-          <div class="obs-title">${this._escape(r.title)}</div>
-          <div class="obs-content">${this._escape(r.content)}</div>
+          <div class="obs-title">${this._esc(r.title)}</div>
+          <div class="obs-content">${this._esc(r.content)}</div>
         </div>
       `;
-    }).join('');
+    }
+
+    if (!html) {
+      html = '<div class="obs-placeholder">Observers watching... first report at T+0</div>';
+    }
+
+    this.container.innerHTML = html;
   }
 
-  _confidenceBar(confidence, obsId) {
-    const pct = Math.round(confidence * 100);
-    const color = obsId === 'mystic'
-      ? (confidence > 0.3 ? '#f0a040' : '#666')
-      : (confidence > 0.7 ? '#4ecca3' : '#f0c040');
-    const stars = obsId === 'mystic'
-      ? this._mysticStars(confidence)
-      : '';
-    return `<span class="obs-confidence" style="color:${color}">${stars}${pct}% conf</span>`;
-  }
-
-  _mysticStars(confidence) {
-    const n = Math.round(confidence * 5);
-    return '⭐'.repeat(n) + '·'.repeat(5 - n) + ' ';
-  }
-
-  _escape(text) {
-    if (!text) return '';
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  _esc(t) {
+    if (!t) return '';
+    return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 }
