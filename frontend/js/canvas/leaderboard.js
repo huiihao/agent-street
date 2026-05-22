@@ -21,9 +21,9 @@ class Leaderboard {
     if (this.personas.length === 0) return;
 
     const rowH = 20;
-    const pad = 4;
-    const barL = 46;  // bar left edge (after rank+id)
-    const barR = w - 4;  // bar right edge (leaves margin)
+    const pad = 3;
+    const barL = 54;  // bar left — after rank + ID, no overlap
+    const barR = w - 3;
     const barMax = barR - barL;
     const maxAbs = Math.max(Math.abs(this.personas[0]?.pnl || 1), 0.01);
 
@@ -39,13 +39,14 @@ class Leaderboard {
 
       // Rank
       ctx.fillStyle = i < 3 ? '#f0c040' : '#666';
-      ctx.font = '6px "Press Start 2P"';
+      ctx.font = '7px "Press Start 2P"';
       ctx.textAlign = 'left';
-      ctx.fillText(String(i + 1).padStart(2, '0'), pad, y + 13);
+      ctx.fillText(String(i + 1), pad, y + 13);
 
-      // ID
+      // ID — padded well into its own column
       ctx.fillStyle = this.colors[p.id] || '#ccc';
-      ctx.fillText(p.id, 17, y + 13);
+      ctx.font = '7px "Press Start 2P"';
+      ctx.fillText(p.id, 14, y + 13);
 
       // Bar track
       const barY = y + 5;
@@ -66,16 +67,13 @@ class Leaderboard {
         ctx.fillRect(x, barY, barW, barH);
       }
 
-      // PnL value INSIDE the bar
-      const pnlStr = (pnl >= 0 ? '+' : '') + Math.abs(pnl).toFixed(0);
+      // PnL value inside bar, white, always visible
+      const val = Math.abs(pnl).toFixed(0);
+      const txt = (pnl >= 0 ? '+$' : '-$') + val;
       ctx.fillStyle = '#fff';
-      ctx.font = '5px "Press Start 2P"';
+      ctx.font = '6px "Press Start 2P"';
       ctx.textAlign = 'right';
-      if (isPos) {
-        ctx.fillText('$' + pnlStr, barL + barW - 3, y + 13);
-      } else {
-        ctx.fillText('-$' + Math.abs(pnl).toFixed(0), barR - 3, y + 13);
-      }
+      ctx.fillText(txt, barR - 3, y + 13);
     });
   }
 }

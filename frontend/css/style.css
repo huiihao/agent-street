@@ -17,7 +17,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: 'Press Start 2P', monospace;
-  font-size: 8px;
+  font-size: 10px;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
@@ -40,7 +40,7 @@ body {
 }
 
 #top-bar h1 {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--accent);
   text-shadow: 2px 2px 0 #000;
   letter-spacing: 3px;
@@ -50,7 +50,7 @@ body {
 
 .pixel-btn {
   font-family: 'Press Start 2P', monospace;
-  font-size: 10px;
+  font-size: 11px;
   padding: 8px 16px;
   background: var(--border);
   color: var(--text);
@@ -65,7 +65,7 @@ body {
 .pixel-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: 4px 4px 0 #000; }
 
 .panel-title {
-  font-size: 8px;
+  font-size: 10px;
   color: var(--gold);
   padding: 5px 8px;
   background: var(--panel-bg);
@@ -145,8 +145,8 @@ body {
   min-height: 80px;
   max-height: 160px;
   overflow-y: auto;
-  font-size: 6px;
-  line-height: 1.6;
+  font-size: 7px;
+  line-height: 1.7;
 }
 
 /* ── Agent detail card ───────────────────────────────────── */
@@ -179,16 +179,23 @@ body {
 .thoughts-title { font-size: 6px; color: var(--gold); margin-bottom: 4px; }
 .thought-line { font-size: 5px; color: #aaa; padding: 1px 0 1px 6px; border-left: 2px solid #333; margin: 2px 0; }
 
-/* ── Observer reports ────────────────────────────────────── */
+/* ── Bottom row: observer + trade side by side ──────────── */
 
-#observer-panel { margin-bottom: 6px; }
+#bottom-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+#observer-panel { flex: 1; min-width: 0; }
+#trade-feed-panel { flex: 1; min-width: 0; }
 
 #observer-reports {
   background: var(--panel-bg);
   border: 2px solid var(--border);
   padding: 6px;
-  min-height: 50px;
-  max-height: 180px;
+  min-height: 80px;
+  max-height: 200px;
   overflow-y: auto;
   display: flex;
   gap: 6px;
@@ -207,7 +214,7 @@ body {
   min-width: 0;
   padding: 6px 8px;
   background: #1a1a30;
-  font-size: 6px;
+  font-size: 7px;
   line-height: 1.5;
   border-top: 3px solid var(--border);
 }
@@ -216,15 +223,15 @@ body {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin-bottom: 3px;
+  margin-bottom: 4px;
 }
-.obs-icon { font-size: 10px; flex-shrink: 0; }
-.obs-name { font-size: 7px; font-weight: bold; flex-shrink: 0; }
-.obs-tick { font-size: 5px; color: #555; margin-left: auto; flex-shrink: 0; }
-.obs-confidence { font-size: 5px; flex-shrink: 0; }
+.obs-icon { font-size: 12px; flex-shrink: 0; }
+.obs-name { font-size: 8px; font-weight: bold; flex-shrink: 0; }
+.obs-tick { font-size: 6px; color: #555; margin-left: auto; flex-shrink: 0; }
+.obs-confidence { font-size: 6px; flex-shrink: 0; }
 
 .obs-title {
-  font-size: 6px;
+  font-size: 7px;
   color: var(--gold);
   margin: 2px 0;
   font-style: italic;
@@ -234,22 +241,20 @@ body {
 }
 
 .obs-content {
-  font-size: 5px;
+  font-size: 6px;
   color: #bbb;
   line-height: 1.4;
 }
 
 /* ── Trade feed ──────────────────────────────────────────── */
 
-#trade-feed-panel { margin-bottom: 6px; }
-
 #trade-feed {
-  height: 112px;
+  height: 224px;
   overflow-y: auto;
   background: var(--panel-bg);
   border: 2px solid var(--border);
   padding: 4px 8px;
-  font-size: 7px;
+  font-size: 8px;
   line-height: 1.8;
 }
 
@@ -270,7 +275,7 @@ body {
   padding: 6px 16px;
   background: var(--panel-bg);
   border: 2px solid var(--border);
-  font-size: 7px;
+  font-size: 8px;
   flex-wrap: wrap;
   gap: 8px;
 }
