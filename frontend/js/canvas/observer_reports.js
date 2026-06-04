@@ -21,30 +21,31 @@ class ObserverReports {
     const names = { physicist: 'Physicist', mathematician: 'Mathematician', mystic: 'Mystic' };
     const colors = { physicist: '#7B9ECF', mathematician: '#9E7BCF', mystic: '#CF7BAE' };
     const order = ['physicist', 'mathematician', 'mystic'];
-    const hasAny = order.some(oid => this.latest[oid]);
 
-    let html = '';
-    for (const oid of order) {
-      const r = this.latest[oid];
-      if (!r) continue;
-      html +=
-        '<div class="obs-report" style="border-top-color:' + (colors[oid] || '#888') + '">' +
-          '<div class="obs-header">' +
-            '<span class="obs-icon">' + (icons[oid] || '') + '</span>' +
-            '<span class="obs-name" style="color:' + (colors[oid] || '#888') + '">' + (names[oid] || oid) + '</span>' +
-            '<span class="obs-tick">T+' + (r.tick || 0) + '</span>' +
-            '<span class="obs-confidence">' + Math.round((r.confidence || 0) * 100) + '%</span>' +
-          '</div>' +
-          '<div class="obs-title">' + this._esc(r.title || '') + '</div>' +
-          '<div class="obs-content">' + this._esc(r.content || '') + '</div>' +
-        '</div>';
+    try {
+      let html = '';
+      for (const oid of order) {
+        const r = this.latest[oid];
+        if (!r) continue;
+        html +=
+          '<div class="obs-report" style="border-top-color:' + (colors[oid] || '#888') + '">' +
+            '<div class="obs-header">' +
+              '<span class="obs-icon">' + (icons[oid] || '') + '</span>' +
+              '<span class="obs-name" style="color:' + (colors[oid] || '#888') + '">' + (names[oid] || oid) + '</span>' +
+              '<span class="obs-tick">T+' + (r.tick || 0) + '</span>' +
+              '<span class="obs-confidence">' + Math.round((r.confidence || 0) * 100) + '%</span>' +
+            '</div>' +
+            '<div class="obs-title">' + this._esc(r.title) + '</div>' +
+            '<div class="obs-content">' + this._esc(r.content) + '</div>' +
+          '</div>';
+      }
+      if (!html) {
+        html = '<div class="obs-placeholder">Waiting for reports... (rcvd: ' + this._recvCount + ')</div>';
+      }
+      this.container.innerHTML = html;
+    } catch(e) {
+      this.container.innerHTML = '<div class="obs-placeholder" style="color:red">ERR: ' + e.message + '</div>';
     }
-
-    if (!html) {
-      html = '<div class="obs-placeholder">Waiting for reports... (rcvd: ' + this._recvCount + ')</div>';
-    }
-
-    this.container.innerHTML = html;
   }
 
   _esc(t) {

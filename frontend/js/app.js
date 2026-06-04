@@ -66,7 +66,7 @@
     if (data.prices) {
       stockChart.addTick(data.prices, data.tick);
     }
-    if (data.observerReports) {
+    if (data.observerReports && data.observerReports.length > 0) {
       observerReports.append(data.observerReports);
     }
     if (data.trades) {
