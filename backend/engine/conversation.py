@@ -93,6 +93,9 @@ class ConversationSystem:
         # Pick 1-2 conversation partners
         partners = random.sample(nearby, min(random.randint(1, 2), len(nearby)))
 
+        # 10% chance: bull/bear debate (TradingAgents-inspired)
+        do_debate = random.random() < 0.10 and len(nearby) >= 1
+
         # Build conversation
         participants = [agent_id] + partners
         syms = list(prices.keys())
@@ -163,6 +166,21 @@ class ConversationSystem:
                     resp = random.choice(RESPONSES_NEUTRAL).format(symbol=symbol)
                     sent = 0.0
                 turns.append(ConversationTurn(partner_id, resp, sent, tick))
+
+        # Bull/bear debate: add 2 extra back-and-forth turns (TradingAgents-inspired)
+        if do_debate:
+            bull_id = random.choice(participants)
+            bear_candidates = [p for p in participants if p != bull_id]
+            if bear_candidates:
+                bear_id = random.choice(bear_candidates)
+                symbol2 = random.choice(syms)
+                debate_turns = [
+                    ConversationTurn(bull_id, f"{symbol2} is undervalued — the numbers don't lie.", 0.3, tick),
+                    ConversationTurn(bear_id, f"Or maybe the market has already priced in the risk.", -0.2, tick),
+                    ConversationTurn(bull_id, f"That's what they said before the last rally.", 0.15, tick),
+                    ConversationTurn(bear_id, f"Past performance doesn't guarantee future results.", -0.1, tick),
+                ]
+                turns.extend(debate_turns)
 
         conv = Conversation(
             participants=participants,

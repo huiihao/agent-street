@@ -66,7 +66,24 @@ class HistoricalDataProvider:
         except Exception as e:
             print(f"  yfinance batch failed: {e}")
 
-        # ── Source 2: Direct CSV per symbol ──
+        # ── Source 2: Alpha Vantage (free tier, reliable) ──
+        av_key = self._get_alpha_vantage_key()
+        if av_key:
+            try:
+                results = {}
+                for symbol in self.symbols:
+                    df = self._fetch_alpha_vantage(symbol, av_key)
+                    if df is not None and not df.empty:
+                        results[symbol] = df
+                        print(f"  [alphavantage] {symbol}: {len(df)} bars")
+                if len(results) >= 3:
+                    self._build_bars(results)
+                    print(f"  => Loaded {self._total_bars} bars from Alpha Vantage")
+                    return
+            except Exception as e:
+                print(f"  Alpha Vantage failed: {e}")
+
+        # ── Source 3: Direct CSV per symbol ──
         results = {}
         for symbol in self.symbols:
             df = self._fetch_csv(symbol)
@@ -104,6 +121,58 @@ class HistoricalDataProvider:
         except Exception:
             pass
 
+        return None
+
+    def _get_alpha_vantage_key(self) -> str | None:
+        """Look for Alpha Vantage API key in env or config."""
+        import os
+        key = os.getenv("ALPHA_VANTAGE_API_KEY", "")
+        if key and key != "demo" and len(key) > 5:
+            return key
+        from backend.config import ALPHA_VANTAGE_API_KEY
+        if ALPHA_VANTAGE_API_KEY and ALPHA_VANTAGE_API_KEY != "demo":
+            return ALPHA_VANTAGE_API_KEY
+        return None
+
+    def _fetch_alpha_vantage(self, symbol, api_key):
+        """Fetch intraday data from Alpha Vantage (free tier: 5 calls/min)."""
+        import time as _time
+        _time.sleep(0.5)  # rate limit: 5 calls/min = 1 per 12s, we stagger
+        interval_map = {"1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min", "1h": "60min"}
+        av_interval = interval_map.get(self.interval, "5min")
+        # Alpha Vantage intraday only returns last 1-2 days in free tier
+        url = (
+            f"https://www.alphavantage.co/query"
+            f"?function=TIME_SERIES_INTRADAY"
+            f"&symbol={symbol}"
+            f"&interval={av_interval}"
+            f"&outputsize=full"
+            f"&apikey={api_key}"
+        )
+        try:
+            resp = requests.get(url, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+            ts_key = f"Time Series ({av_interval})"
+            if ts_key not in data:
+                return None
+            ts = data[ts_key]
+            rows = []
+            for dt_str, values in ts.items():
+                rows.append({
+                    "time": datetime.fromisoformat(dt_str),
+                    "open": float(values["1. open"]),
+                    "high": float(values["2. high"]),
+                    "low": float(values["3. low"]),
+                    "close": float(values["4. close"]),
+                    "volume": int(values["5. volume"]),
+                })
+            if rows:
+                import pandas as pd
+                rows.sort(key=lambda r: r["time"])
+                return pd.DataFrame(rows).set_index("time")
+        except Exception as e:
+            print(f"    Alpha Vantage {symbol}: {e}")
         return None
 
     def _fetch_csv(self, symbol):

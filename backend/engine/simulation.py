@@ -199,6 +199,8 @@ class SimulationLoop:
             persona = self.personas.get(t.persona_id)
             if persona:
                 persona.trade_history.append(t)
+                # Persist decision for reflection (TradingAgents-inspired)
+                self._log_decision(t, prices)
 
         # 7. Current world time from the bar data
         world_time = self._get_world_time()
@@ -347,6 +349,29 @@ class SimulationLoop:
             return 0.0
         avg = sum(pnls) / len(pnls)
         return max(-1.0, min(1.0, avg * 10))
+
+    def _log_decision(self, trade, prices):
+        """Persist trade to memory log for future reflection (TradingAgents-inspired)."""
+        try:
+            from pathlib import Path
+            import json
+            log_dir = Path(__file__).parent.parent.parent / ".cache"
+            log_dir.mkdir(exist_ok=True)
+            log_file = log_dir / "trade_memory.jsonl"
+            entry = {
+                "tick": self.tick,
+                "agent": trade.persona_id,
+                "direction": trade.direction,
+                "symbol": trade.symbol,
+                "shares": trade.shares,
+                "price": trade.price,
+                "reason": trade.reason,
+                "counterparty": trade.counterparty,
+            }
+            with open(log_file, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except Exception:
+            pass  # non-critical
 
     def on_frame(self, callback: callable):
         self._on_frame = callback

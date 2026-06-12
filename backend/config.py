@@ -11,6 +11,9 @@ HIST_DAYS_BACK = 5       # days of history to load
 HIST_INTERVAL = "5m"     # bar interval: 1m, 5m, 15m, 30m, 1h
 HIST_LOOP = True          # loop back to start when data runs out
 
+# Alpha Vantage API key (free tier: https://alphavantage.co/support/#api-key)
+ALPHA_VANTAGE_API_KEY = ""  # set via env ALPHA_VANTAGE_API_KEY or here
+
 # LLM integration (optional)
 LLM_ENABLED = False       # set True to enable LLM-powered agents
 LLM_API_KEY = ""          # your API key
