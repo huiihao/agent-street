@@ -76,6 +76,7 @@
     if (data.sentiment !== undefined) {
       const pct = ((data.sentiment + 1) / 2) * 100;
       document.getElementById('sentiment-fill').style.width = pct + '%';
+      townMap.setSentiment(data.sentiment);
     }
     townMap.renderFrame();
 

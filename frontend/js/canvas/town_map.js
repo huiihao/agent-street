@@ -1,32 +1,64 @@
 /**
- * Town Map — Rich pixel-art Smallville-style town with day/night cycle,
- * smooth agent movement, weather effects, and detailed tile rendering.
+ * Agent Street Town Map — Star-Office-UI polished pixel art + MiroFish boids.
  *
- * References: a16z/ai-town (PixiJS pixel town), Moltcraft (isometric CSS),
- *   Stanford generative_agents (Phaser tile-map).
+ * Star-Office-UI inspiration: state-driven sprite animation, zone-based layout,
+ *   speech bubbles, cohesive pixel palette, ambient lighting.
+ * MiroFish inspiration: boids flocking (separation/alignment/cohesion),
+ *   sentiment auras, emergent group clustering, opinion cascades.
  */
 const TILE_PX = 28;
 const MAP_COLS = 20;
 const MAP_ROWS = 14;
+const SC = 2; // sprite scale
 
-const PALETTE = {
-  grass:       '#4a7a3a',
-  grassLight:  '#5a8a4a',
-  grassDark:   '#3a5a2a',
-  road:        '#7a7a7a',
-  roadLine:    '#c8c850',
-  roadEdge:    '#5a5a5a',
-  sidewalk:    '#9a9a9a',
-  water:       '#4a8aba',
-  waterLight:  '#6ab8da',
-  waterDark:   '#2a5a8a',
-  treeTrunk:   '#6a4a2a',
-  treeLeaf:    '#3a7a3a',
-  treeLeafLt:  '#4a9a4a',
-  buildingShadow: 'rgba(0,0,0,0.3)',
-  night:       'rgba(10,10,40,0.55)',
-  evening:     'rgba(40,20,10,0.25)',
-  dawn:        'rgba(60,40,20,0.15)',
+// ── Star-Office-UI cohesive pixel palette ─────────────────
+const P = {
+  grass:       '#5a8f4a',
+  grassAlt:    '#4f7d41',
+  grassFlower: '#e8d44d',
+  grassStone:  '#7a7a6a',
+  road:        '#8a8a82',
+  roadLine:    '#d4c840',
+  roadEdge:    '#6a6a62',
+  sidewalk:    '#a0a098',
+  sidewalkLine:'#8a8a82',
+  water:       '#4a8ab8',
+  waterShimmer:'#7ab8d8',
+  waterDeep:   '#306080',
+  treeTrunk:   '#7a5630',
+  treeCanopy:  '#3a7a3a',
+  treeCanopyLt:'#4a9a4a',
+  bldgShadow:  'rgba(0,0,0,0.35)',
+  nightOverlay:'rgba(8,8,36,0.55)',
+  eveningOvl:  'rgba(40,18,10,0.22)',
+  dawnOvl:     'rgba(55,35,15,0.12)',
+  agentShadow: 'rgba(0,0,0,0.35)',
+  skinLight:   '#f8d8b8',
+  skinShadow:  '#d4a878',
+  white:       '#f0ece4',
+  black:       '#1a1a2e',
+  gold:        '#f0c840',
+  red:         '#e84855',
+  green:       '#4ecca3',
+  blue:        '#5a9ed4',
+};
+
+// ── MiroFish boids constants ───────────────────────────────
+const BOIDS = {
+  sepRadius: 2.5,    // tiles — separation distance
+  cohRadius: 4.0,    // tiles — cohesion distance
+  sepWeight: 0.6,    // how strongly to separate
+  cohWeight: 0.3,    // how strongly to cohere
+  maxSpeed:  0.15,   // max tile-units per frame
+};
+
+// ── Activity states (Star-Office-UI inspired) ──────────────
+const ACTIVITY = {
+  idle:     { color: '#555', label: 'idle' },
+  moving:   { color: '#4ecca3', label: 'moving' },
+  trading:  { color: '#f0c840', label: 'trading' },
+  chatting: { color: '#5a9ed4', label: 'chatting' },
+  panicking:{ color: '#e84855', label: 'panicking' },
 };
 
 class TownMap {
@@ -41,70 +73,41 @@ class TownMap {
     this.hoveredAgent = null;
     this.selectedAgent = null;
     this.onSelectAgent = null;
-    this._animFrame = 0;
+    this._t = 0;           // animation frame counter
     this._worldHour = 12;
-    this._rainDrops = [];
+    this._rain = [];
     this._fireflies = [];
-    this._lastTrades = {};  // agentId -> {direction, reason, tick}
+    this._lastTrades = {};
+    this._sentiment = 0;
     this._initParticles();
-    this._animLoop = null;
+    this._loop = null;
 
-    this.canvas.addEventListener('mousemove', (e) => this._onMouseMove(e));
-    this.canvas.addEventListener('click', (e) => this._onClick(e));
-    this.canvas.addEventListener('mouseleave', () => { this.hoveredAgent = null; });
+    this.canvas.addEventListener('mousemove', e => this._mouseMove(e));
+    this.canvas.addEventListener('click', e => this._click(e));
+    this.canvas.addEventListener('mouseleave', () => this.hoveredAgent = null);
   }
 
-  updateTrades(trades) {
-    if (!trades) return;
-    for (const t of trades) {
-      if (!['physicist','mathematician','mystic'].includes(t.persona)) {
-        this._lastTrades[t.persona] = { direction: t.direction, reason: t.reason, tick: this._animFrame };
-      }
-    }
-  }
+  // ── Public API ──────────────────────────────────────────
 
   async init() {
-    const resp = await fetch('/api/town');
-    const data = await resp.json();
-    this.mapData = data.map;
-    this.locations = data.locations;
-    this._startAnimLoop();
-  }
-
-  _initParticles() {
-    for (let i = 0; i < 30; i++) {
-      this._rainDrops.push({
-        x: Math.random() * MAP_COLS * TILE_PX,
-        y: Math.random() * MAP_ROWS * TILE_PX,
-        speed: 3 + Math.random() * 5,
-        len: 3 + Math.random() * 4,
-      });
-    }
-    for (let i = 0; i < 12; i++) {
-      this._fireflies.push({
-        x: Math.random() * MAP_COLS * TILE_PX,
-        y: Math.random() * MAP_ROWS * TILE_PX,
-        phase: Math.random() * Math.PI * 2,
-        speed: 0.02 + Math.random() * 0.04,
-        radius: 2 + Math.random() * 4,
-      });
-    }
+    const r = await fetch('/api/town');
+    const d = await r.json();
+    this.mapData = d.map;
+    this.locations = d.locations;
+    this._startLoop();
   }
 
   updateAgentStates(states) {
-    if (!states || !Array.isArray(states)) return;
-    // Diagnostic: verify we got MBTI agents
-    const traderCount = states.filter(s => !['physicist','mathematician','mystic'].includes(s.id)).length;
-    if (this._animFrame < 10 || this._animFrame % 60 === 0) {
-      console.log(`updateAgentStates: ${states.length} total, ${traderCount} traders, ${states.length - traderCount} observers`);
-    }
+    if (!states) return;
     states.forEach(s => {
       const prev = this.agents[s.id];
-      const hadPos = prev && prev.tileX !== undefined;
+      const had = prev && prev.tx !== undefined;
       this.agents[s.id] = {
         ...prev,
-        tileX: hadPos ? prev.tileX : s.tileX,
-        tileY: hadPos ? prev.tileY : s.tileY,
+        tx: had ? prev.tx : s.tileX,
+        ty: had ? prev.ty : s.tileY,
+        vx: prev ? (prev.vx || 0) : 0,
+        vy: prev ? (prev.vy || 0) : 0,
         targetTX: s.tileX,
         targetTY: s.tileY,
         location: s.location,
@@ -115,724 +118,547 @@ class TownMap {
     });
   }
 
-  setWorldTime(timeStr) {
-    if (!timeStr) return;
-    const m = timeStr.match(/(\d{2}):(\d{2})/);
+  updateTrades(trades) {
+    if (!trades) return;
+    for (const t of trades) {
+      if (!['physicist','mathematician','mystic'].includes(t.persona)) {
+        this._lastTrades[t.persona] = { dir: t.direction, reason: t.reason, tick: this._t };
+      }
+    }
+  }
+
+  updateConversations(convs) { this.conversations = convs || []; }
+  setWorldTime(t) {
+    if (!t) return;
+    const m = t.match(/(\d{2}):(\d{2})/);
     if (m) this._worldHour = parseInt(m[1]) + parseInt(m[2]) / 60;
   }
+  setSentiment(v) { this._sentiment = v || 0; }
+  renderFrame() {}
 
-  updateConversations(convs) {
-    this.conversations = convs || [];
+  // ── Animation loop ──────────────────────────────────────
+
+  _startLoop() {
+    const tick = () => {
+      this._t++;
+      this._applyBoids();
+      this._draw();
+      this._loop = requestAnimationFrame(tick);
+    };
+    this._loop = requestAnimationFrame(tick);
   }
 
-  // ── Animation loop ──────────────────────────────────────────
+  // ── MiroFish boids ──────────────────────────────────────
 
-  _startAnimLoop() {
-    const tick = () => {
-      this._animFrame++;
-      // Smooth agent movement (lerp toward target)
-      for (const a of Object.values(this.agents)) {
-        if (a.targetTX !== undefined) {
-          a.tileX += (a.targetTX - a.tileX) * 0.25;
-          a.tileY += (a.targetTY - a.tileY) * 0.25;
-          if (Math.abs(a.targetTX - a.tileX) < 0.02) a.tileX = a.targetTX;
-          if (Math.abs(a.targetTY - a.tileY) < 0.02) a.tileY = a.targetTY;
+  _applyBoids() {
+    const agents = Object.values(this.agents);
+    if (agents.length < 2) return;
+
+    for (const a of agents) {
+      let sepX = 0, sepY = 0, cohX = 0, cohY = 0;
+      let sepN = 0, cohN = 0;
+
+      for (const b of agents) {
+        if (a === b) continue;
+        const dx = a.tx - b.tx;
+        const dy = a.ty - b.ty;
+        const dist = Math.hypot(dx, dy);
+
+        // Separation: steer away from nearby agents
+        if (dist < BOIDS.sepRadius && dist > 0.01) {
+          sepX += dx / dist;
+          sepY += dy / dist;
+          sepN++;
+        }
+        // Cohesion: steer toward group center
+        if (dist < BOIDS.cohRadius) {
+          cohX += b.tx;
+          cohY += b.ty;
+          cohN++;
         }
       }
-      // Animate particles
-      for (const d of this._rainDrops) {
-        d.y += d.speed;
-        d.x -= 0.5;
-        if (d.y > MAP_ROWS * TILE_PX) { d.y = -d.len; d.x = Math.random() * MAP_COLS * TILE_PX; }
-      }
-      for (const f of this._fireflies) {
-        f.phase += f.speed;
-        f.x += Math.sin(f.phase * 3) * 0.3;
-        f.y += Math.cos(f.phase * 2) * 0.2;
+
+      if (cohN > 0) {
+        cohX = cohX / cohN - a.tx;
+        cohY = cohY / cohN - a.ty;
       }
 
-      this._renderFrame();
-      this._animLoop = requestAnimationFrame(tick);
-    };
-    this._animLoop = requestAnimationFrame(tick);
+      // Combine forces + target attraction
+      const toTargetX = a.targetTX - a.tx;
+      const toTargetY = a.targetTY - a.ty;
+      const targetDist = Math.hypot(toTargetX, toTargetY);
+
+      let fx = toTargetX * 0.15;  // target attraction
+      let fy = toTargetY * 0.15;
+      if (sepN > 0) { fx += sepX * BOIDS.sepWeight; fy += sepY * BOIDS.sepWeight; }
+      if (cohN > 0) { fx += cohX * BOIDS.cohWeight; fy += cohY * BOIDS.cohWeight; }
+
+      // Apply velocity with max speed
+      a.vx = (a.vx || 0) + fx;
+      a.vy = (a.vy || 0) + fy;
+      const speed = Math.hypot(a.vx, a.vy);
+      if (speed > BOIDS.maxSpeed) {
+        a.vx = a.vx / speed * BOIDS.maxSpeed;
+        a.vy = a.vy / speed * BOIDS.maxSpeed;
+      }
+
+      a.tx += a.vx;
+      a.ty += a.vy;
+
+      // Arrival: snap to target if close
+      if (targetDist < 0.15) { a.tx = a.targetTX; a.ty = a.targetTY; a.vx = 0; a.vy = 0; }
+    }
   }
 
-  renderFrame() {
-    // Public render triggered by WS tick — just updates world time from data
-    // The actual redraw happens continuously via requestAnimationFrame
-  }
+  // ── Master draw ─────────────────────────────────────────
 
-  _renderFrame() {
+  _draw() {
     this._drawMap();
-    this._drawDayNightOverlay();  // darken the world first
+    this._drawOverlay();
     this._drawConversations();
     this._drawWeather();
-    this._drawAgents();           // agents ALWAYS on top, full brightness
+    this._drawAgents();
   }
 
-  // ── Map tiles ───────────────────────────────────────────────
+  // ── Map tiles ───────────────────────────────────────────
 
   _drawMap() {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
     if (!this.mapData) return;
 
     for (let y = 0; y < MAP_ROWS; y++) {
       for (let x = 0; x < MAP_COLS; x++) {
-        const tile = this.mapData[y][x];
-        const px = x * TILE_PX;
-        const py = y * TILE_PX;
-
-        switch (tile) {
-          case 0: this._drawGrass(px, py); break;
-          case 1: case 2: this._drawRoad(px, py, tile); break;
-          case 4: this._drawTree(px, py); break;
-          case 5: this._drawWater(px, py); break;
-          case 6: this._drawSidewalk(px, py); break;
-        }
+        const t = this.mapData[y][x], px = x * TILE_PX, py = y * TILE_PX;
+        if (t === 0) this._grass(px, py, x, y);
+        else if (t === 1 || t === 2) this._road(px, py, t, x);
+        else if (t === 4) this._tree(px, py);
+        else if (t === 5) this._water(px, py, x, y);
+        else if (t === 6) this._walk(px, py, x);
       }
     }
+    for (const loc of this.locations) this._building(loc);
+  }
 
-    // Buildings on top of tiles
-    for (const loc of this.locations) {
-      this._drawBuilding(loc);
+  _grass(x, y, gx, gy) {
+    const ctx = this.ctx;
+    const s = (gx * 7 + gy * 13) % 5;
+    ctx.fillStyle = s < 2 ? P.grassAlt : P.grass;
+    ctx.fillRect(x, y, TILE_PX, TILE_PX);
+    if (s === 3) { // flower
+      ctx.fillStyle = P.grassFlower;
+      ctx.fillRect(x + 8, y + 10, 2, 2); ctx.fillRect(x + 16, y + 6, 2, 2);
+    }
+    if (s === 4) { // stone
+      ctx.fillStyle = P.grassStone;
+      ctx.fillRect(x + 10, y + 14, 4, 3);
     }
   }
 
-  _drawGrass(x, y) {
+  _road(x, y, tile, gx) {
     const ctx = this.ctx;
-    ctx.fillStyle = PALETTE.grass;
+    ctx.fillStyle = P.road;
     ctx.fillRect(x, y, TILE_PX, TILE_PX);
-    // Random subtle grass variation
-    const seed = (x * 31 + y * 17) % 7;
-    if (seed === 0) ctx.fillStyle = PALETTE.grassLight;
-    else if (seed === 1) ctx.fillStyle = PALETTE.grassDark;
-    if (seed < 2) ctx.fillRect(x, y, TILE_PX, TILE_PX);
-    // Tiny flowers
-    if (seed === 3) {
-      ctx.fillStyle = '#f0f050';
-      ctx.fillRect(x + 6, y + 10, 2, 2);
-      ctx.fillRect(x + 14, y + 6, 2, 2);
-      ctx.fillStyle = '#f08080';
-      ctx.fillRect(x + 16, y + 14, 2, 2);
-    }
-    // Stone
-    if (seed === 4) {
-      ctx.fillStyle = '#777';
-      ctx.fillRect(x + 10, y + 12, 4, 3);
-    }
-  }
-
-  _drawRoad(x, y, tile) {
-    const ctx = this.ctx;
-    ctx.fillStyle = PALETTE.road;
-    ctx.fillRect(x, y, TILE_PX, TILE_PX);
-
-    // Dashed center line
+    // Lane dashes
     if (tile === 1) {
-      // Horizontal road — vertical center line
-      if (Math.floor(x / TILE_PX) % 3 === 1) {
-        ctx.fillStyle = PALETTE.roadLine;
-        ctx.fillRect(x + TILE_PX / 2 - 1, y + 4, 2, 4);
-        ctx.fillRect(x + TILE_PX / 2 - 1, y + 16, 2, 4);
+      if (gx % 3 === 1) {
+        ctx.fillStyle = P.roadLine;
+        ctx.fillRect(x + TILE_PX / 2 - 1, y + 4, 2, 5);
+        ctx.fillRect(x + TILE_PX / 2 - 1, y + 16, 2, 5);
       }
-    } else if (tile === 2) {
-      // Vertical road — horizontal center line
-      if (Math.floor(y / TILE_PX) % 3 === 1) {
-        ctx.fillStyle = PALETTE.roadLine;
-        ctx.fillRect(x + 4, y + TILE_PX / 2 - 1, 4, 2);
-        ctx.fillRect(x + 16, y + TILE_PX / 2 - 1, 4, 2);
+    } else {
+      if (gx % 3 === 1) {
+        ctx.fillStyle = P.roadLine;
+        ctx.fillRect(x + 4, y + TILE_PX / 2 - 1, 5, 2);
+        ctx.fillRect(x + 16, y + TILE_PX / 2 - 1, 5, 2);
       }
     }
-    // Edge shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.08)';
-    ctx.fillRect(x, y, TILE_PX, 2);
-    ctx.fillRect(x, y, 2, TILE_PX);
+    ctx.fillStyle = 'rgba(0,0,0,0.06)';
+    ctx.fillRect(x, y, TILE_PX, 1);
   }
 
-  _drawSidewalk(x, y) {
+  _walk(x, y, gx) {
     const ctx = this.ctx;
-    ctx.fillStyle = PALETTE.sidewalk;
+    ctx.fillStyle = P.sidewalk;
     ctx.fillRect(x, y, TILE_PX, TILE_PX);
-    // Grid lines
-    ctx.fillStyle = '#7a7a7a';
-    if (Math.floor(x / TILE_PX) % 2 === 0) {
-      ctx.fillRect(x + 11, y, 2, TILE_PX);
-    }
+    if (gx % 2 === 0) { ctx.fillStyle = P.sidewalkLine; ctx.fillRect(x + 11, y, 2, TILE_PX); }
   }
 
-  _drawTree(x, y) {
+  _tree(x, y) {
     const ctx = this.ctx;
-    // Trunk
-    ctx.fillStyle = PALETTE.treeTrunk;
-    ctx.fillRect(x + 10, y + 18, 4, 6);
-    // Leaves (clustered circles)
-    ctx.fillStyle = PALETTE.treeLeaf;
-    ctx.beginPath(); ctx.arc(x + 12, y + 12, 10, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = PALETTE.treeLeafLt;
-    ctx.beginPath(); ctx.arc(x + 8, y + 8, 6, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = PALETTE.treeLeaf;
-    ctx.beginPath(); ctx.arc(x + 16, y + 7, 7, 0, Math.PI * 2); ctx.fill();
-    // Shadow under tree
+    ctx.fillStyle = P.treeTrunk;
+    ctx.fillRect(x + 11, y + 17, 4, 7);
     ctx.fillStyle = 'rgba(0,0,0,0.15)';
-    ctx.fillRect(x + 4, y + 20, 16, 3);
+    ctx.fillRect(x + 5, y + 20, 16, 3);
+    ctx.fillStyle = P.treeCanopy;
+    ctx.beginPath(); ctx.arc(x + 13, y + 11, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = P.treeCanopyLt;
+    ctx.beginPath(); ctx.arc(x + 8, y + 7, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = P.treeCanopy;
+    ctx.beginPath(); ctx.arc(x + 17, y + 6, 7, 0, Math.PI * 2); ctx.fill();
   }
 
-  _drawWater(x, y) {
+  _water(x, y, gx, gy) {
     const ctx = this.ctx;
-    const t = this._animFrame * 0.05;
-    const shimmer = Math.sin(t + x * 0.3 + y * 0.3) * 0.3;
-    const base = PALETTE.water;
-    ctx.fillStyle = base;
+    const w = Math.sin(this._t * 0.04 + gx * 0.4 + gy * 0.4) * 0.3;
+    ctx.fillStyle = P.water;
     ctx.fillRect(x, y, TILE_PX, TILE_PX);
-    // Wave highlights
-    const h = 5 + shimmer * 3;
-    ctx.fillStyle = PALETTE.waterLight;
-    ctx.fillRect(x, y + h, TILE_PX, 1);
-    ctx.fillStyle = PALETTE.waterDark;
-    ctx.fillRect(x, y + h + 4, TILE_PX, 1);
-    // Ripples
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.fillRect(x + 4 + shimmer * 2, y + 8, 3, 1);
-    ctx.fillRect(x + 14 - shimmer * 2, y + 16, 2, 1);
+    ctx.fillStyle = P.waterShimmer;
+    ctx.fillRect(x, y + 6 + w * 3, TILE_PX, 1);
+    ctx.fillStyle = P.waterDeep;
+    ctx.fillRect(x, y + 11 + w * 2, TILE_PX, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.fillRect(x + 5 + w, y + 9, 2, 1);
   }
 
-  // ── Buildings ───────────────────────────────────────────────
-
-  _drawBuilding(loc) {
+  _building(loc) {
     const ctx = this.ctx;
     const bx = loc.tileX * TILE_PX - TILE_PX / 2;
     const by = loc.tileY * TILE_PX - TILE_PX / 2;
     const w = loc.width * TILE_PX;
     const h = loc.height * TILE_PX;
+    const c = loc.color;
 
-    // Shadow
-    ctx.fillStyle = PALETTE.buildingShadow;
+    ctx.fillStyle = P.bldgShadow;
     ctx.fillRect(bx + 3, by + 3, w, h);
-
-    // Wall
-    ctx.fillStyle = loc.color;
+    ctx.fillStyle = c;
     ctx.fillRect(bx, by, w, h);
-
-    // Wall texture — horizontal brick lines
-    ctx.fillStyle = this._darken(loc.color, 0.08);
-    for (let r = 4; r < h; r += 6) {
-      ctx.fillRect(bx + 2, by + r, w - 4, 1);
-    }
-
-    // Roof
-    ctx.fillStyle = this._darken(loc.color, 0.35);
-    ctx.fillRect(bx - 1, by - 3, w + 2, 6);
-    ctx.fillStyle = this._darken(loc.color, 0.2);
-    ctx.fillRect(bx, by + 2, w, 3);
-
-    // Window (if building is big enough)
+    ctx.fillStyle = this._darken(c, 0.08);
+    for (let r = 5; r < h; r += 7) ctx.fillRect(bx + 2, by + r, w - 4, 1);
+    ctx.fillStyle = this._darken(c, 0.35);
+    ctx.fillRect(bx - 1, by - 3, w + 2, 5);
     if (w >= 48 && h >= 36) {
-      const wx = bx + w / 2 - 8;
-      const wy = by + h / 2 - 6;
+      const wx = bx + w / 2 - 8, wy = by + 10;
       ctx.fillStyle = '#ffe8a0';
       ctx.fillRect(wx, wy, 16, 12);
-      ctx.strokeStyle = '#3a2a1a';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#3a2a1a'; ctx.lineWidth = 2;
       ctx.strokeRect(wx, wy, 16, 12);
-      // Window cross
       ctx.fillStyle = '#3a2a1a';
-      ctx.fillRect(wx + 7, wy, 2, 12);
-      ctx.fillRect(wx, wy + 5, 16, 2);
+      ctx.fillRect(wx + 7, wy, 2, 12); ctx.fillRect(wx, wy + 5, 16, 2);
     }
-
-    // Door
-    const dx = bx + w / 2 - 5;
-    const dy = by + h - 14;
-    ctx.fillStyle = this._darken(loc.color, 0.45);
-    ctx.fillRect(dx, dy, 10, 12);
-    ctx.fillStyle = '#f0c040';
-    ctx.fillRect(dx + 8, dy + 5, 1, 1); // doorknob
-
-    // Outline
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 2;
+    ctx.fillStyle = this._darken(c, 0.45);
+    ctx.fillRect(bx + w / 2 - 5, by + h - 12, 10, 10);
+    ctx.fillStyle = P.gold; ctx.fillRect(bx + w / 2 + 3, by + h - 8, 1, 1);
+    ctx.strokeStyle = P.black; ctx.lineWidth = 2;
     ctx.strokeRect(bx, by, w, h);
-
-    // Label
-    const labelY = Math.min(by + h + 14, this.canvas.height - 4);
-    ctx.fillStyle = '#f0c040';
+    const ly = Math.min(by + h + 14, this.canvas.height - 4);
+    ctx.fillStyle = P.gold;
     ctx.font = '6px "Press Start 2P"';
     ctx.textAlign = 'center';
-    ctx.fillText(loc.name, bx + w / 2, labelY);
+    ctx.fillText(loc.name, bx + w / 2, ly);
   }
 
-  // ── Agents ──────────────────────────────────────────────────
+  // ── Day/night ───────────────────────────────────────────
+
+  _drawOverlay() {
+    const h = this._worldHour;
+    let ov = null;
+    if (h >= 22 || h < 5) ov = P.nightOverlay;
+    else if (h >= 20) ov = `rgba(25,10,30,${0.12 + (h - 20) / 2 * 0.43})`;
+    else if (h < 7) ov = `rgba(30,20,30,${0.08 + (7 - h) / 2 * 0.42})`;
+    if (ov) { this.ctx.fillStyle = ov; this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height); }
+  }
+
+  // ── Weather ─────────────────────────────────────────────
+
+  _drawWeather() {
+    const ctx = this.ctx;
+    const rainChance = ((this._worldHour * 7) % 10) < 2;
+    if (rainChance) {
+      ctx.fillStyle = 'rgba(140,170,200,0.35)';
+      for (const d of this._rain) {
+        d.y += d.spd; d.x -= 0.6;
+        if (d.y > MAP_ROWS * TILE_PX) { d.y = -d.len; d.x = Math.random() * MAP_COLS * TILE_PX; }
+        ctx.fillRect(d.x, d.y, 1, d.len);
+      }
+    }
+    if (this._worldHour < 6 || this._worldHour > 20) {
+      const a = this._worldHour < 6 ? (6 - this._worldHour) / 6 : (this._worldHour - 20) / 4;
+      for (const f of this._fireflies) {
+        f.ph += f.spd;
+        const pulse = Math.sin(f.ph) * 0.5 + 0.5;
+        ctx.fillStyle = `rgba(240,240,100,${a * pulse * 0.7})`;
+        ctx.fillRect(f.x - 1, f.y - 1, f.r, f.r);
+      }
+    }
+    // Birds
+    if (this._worldHour > 7 && this._worldHour < 17 && this._t % 120 < 60) {
+      const bx = (this._t * 0.35) % (MAP_COLS * TILE_PX + 40) - 20;
+      const by = 18 + Math.sin(this._t * 0.025) * 6;
+      ctx.fillStyle = '#333';
+      ctx.fillRect(bx, by, 4, 2); ctx.fillRect(bx + 7, by, 4, 2);
+    }
+  }
+
+  // ── Agents ──────────────────────────────────────────────
 
   _drawAgents() {
     const ctx = this.ctx;
-    const posCount = {};
-
-    // Diagnostic (small, dim)
-    const count = Object.keys(this.agents).length;
-    ctx.fillStyle = 'rgba(0,255,0,0.4)';
-    ctx.font = '7px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(`AGENTS:${count}`, 4, this.canvas.height - 4);
+    // Diagnostic
+    const n = Object.keys(this.agents).length;
+    ctx.fillStyle = 'rgba(0,255,0,0.3)';
+    ctx.font = '6px monospace'; ctx.textAlign = 'left';
+    ctx.fillText('A:' + n, 4, this.canvas.height - 4);
 
     for (const [id, a] of Object.entries(this.agents)) {
-      const tx = Math.round(a.tileX);
-      const ty = Math.round(a.tileY);
-      const key = `${tx},${ty}`;
-      const stackIdx = posCount[key] || 0;
-      posCount[key] = stackIdx + 1;
+      const tx = Math.round(a.tx), ty = Math.round(a.ty);
+      const cx = tx * TILE_PX + TILE_PX / 2;
+      const cy = ty * TILE_PX + TILE_PX / 2;
+      const sel = this.selectedAgent === id;
+      const hov = this.hoveredAgent === id;
+      const obs = ['physicist','mathematician','mystic'].includes(id);
 
-      // Boids-inspired circular spread (MiroFish): separation by angle
-      const angle = (stackIdx / 4) * Math.PI * 2 + (this._animFrame * 0.002);
-      const spread = 4 + stackIdx * 1.5;
-      const offX = Math.cos(angle) * spread;
-      const offY = Math.sin(angle) * spread;
-      const cx = tx * TILE_PX + TILE_PX / 2 + offX;
-      const cy = ty * TILE_PX + TILE_PX / 2 + offY;
-      const isSelected = this.selectedAgent === id;
-      const isHovered = this.hoveredAgent === id;
-      const isObserver = ['physicist','mathematician','mystic'].includes(id);
-
-      // Determine activity state (Star-Office-UI inspired)
+      // Activity state
       const trade = this._lastTrades[id];
-      const hasRecentTrade = trade && (this._animFrame - trade.tick) < 80;
-      const isChatting = this.conversations.some(c => c.participants.includes(id));
-      const activity = hasRecentTrade ? 'trading' : isChatting ? 'chatting' : a.isMoving ? 'moving' : 'idle';
+      const trading = trade && (this._t - trade.tick) < 80;
+      const chatting = this.conversations.some(c => c.participants.includes(id));
+      const st = obs ? 'idle' : trading ? 'trading' : chatting ? 'chatting' : a.isMoving ? 'moving' : 'idle';
+      const stC = ACTIVITY[st].color;
 
-      // ── Shadow ──
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(cx - 6, cy + 7, 12, 3);
+      // Shadow
+      ctx.fillStyle = P.agentShadow;
+      ctx.fillRect(cx - 7, cy + 7, 14, 4);
 
-      // ── Activity indicator dot (colored by state) ──
-      const activityColors = { trading: '#f0c040', chatting: '#6baed6', moving: '#4ecca3', idle: '#555' };
-      ctx.fillStyle = activityColors[activity];
-      ctx.fillRect(cx - 7, cy - 13, 3, 3);
+      // Sentiment aura (MiroFish: opinion visible as colored halo)
+      const sentimentGlow = this._getMoodGlow(a.mood);
+      ctx.fillStyle = sentimentGlow;
+      ctx.fillRect(cx - 12, cy - 12, 24, 24);
 
-      // ── Body sprite ──
-      if (isObserver) {
-        this._drawObserverSprite(ctx, cx, cy, id, a.mood);
+      // Activity dot
+      ctx.fillStyle = stC;
+      ctx.fillRect(cx - 8, cy - 16, 4, 4);
+
+      // Sprite
+      if (obs) {
+        this._drawObserverAt(ctx, cx, cy, id);
       } else {
-        const tradeMood = hasRecentTrade ? this._tradeMood(trade) : null;
-        this._drawTraderSprite(ctx, cx, cy, id, tradeMood || a.mood, a.color, this._animFrame);
-        if (hasRecentTrade) {
-          this._drawTradeIndicator(ctx, cx, cy, trade);
+        this._drawTraderAt(ctx, cx, cy, id, a.mood, a.color, st);
+        // Trade indicator
+        if (trading && trade) {
+          const alpha = Math.max(0, 1 - (this._t - trade.tick) / 80);
+          if (alpha > 0.1) {
+            const icons = { BUY: '▲', SELL: '▼' };
+            const colors = { BUY: P.green, SELL: P.red };
+            if (trade.reason === 'panic_sell') {
+              ctx.fillStyle = `rgba(232,72,85,${alpha})`;
+              ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+              ctx.fillText('!', cx, cy - 20);
+            } else {
+              ctx.fillStyle = colors[trade.dir] || P.gold;
+              ctx.fillStyle = ctx.fillStyle.replace(')', `,${alpha})`).replace('rgb', 'rgba');
+              ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
+              ctx.fillText(icons[trade.dir] || '$', cx, cy - 20);
+            }
+          }
         }
       }
 
-      // ── ID label ──
-      ctx.fillStyle = isObserver ? '#ccc' : '#fff';
-      ctx.font = isObserver ? '5px monospace' : 'bold 6px monospace';
+      // ID label
+      ctx.fillStyle = obs ? '#aaa' : P.white;
+      ctx.font = obs ? '5px monospace' : 'bold 6px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(isObserver ? id.slice(0,4)+'..' : id, cx, cy + 16);
+      ctx.fillText(obs ? id.slice(0,4)+'..' : id, cx, cy + 14);
 
-      // ── Selection ──
-      if (isHovered || isSelected) {
-        ctx.strokeStyle = isSelected ? '#f0c040' : 'rgba(255,255,255,0.7)';
-        ctx.lineWidth = isSelected ? 2 : 1;
+      // Selection ring
+      if (hov || sel) {
+        ctx.strokeStyle = sel ? P.gold : 'rgba(255,255,255,0.7)';
+        ctx.lineWidth = sel ? 2 : 1;
         ctx.setLineDash([2, 2]);
-        ctx.strokeRect(cx - 9, cy - 14, 18, 32);
+        ctx.strokeRect(cx - 10, cy - 14, 20, 30);
         ctx.setLineDash([]);
       }
-
-      // ── Moving dots ──
-      if (a.isMoving && !isObserver) {
-        const phase = this._animFrame % 20;
-        for (let i = 0; i < 3; i++) {
-          ctx.fillStyle = `rgba(255,255,255,${phase > i * 6 ? 1 : 0.2})`;
-          ctx.fillRect(cx - 4 + i * 4, cy + 18, 2, 2);
-        }
-      }
     }
   }
 
-  // ── Trader sprite: detailed pixel character ────────────────
-
-  _drawTraderSprite(ctx, cx, cy, id, mood, color, frame) {
-    const SC = 2; // 2x scale
-    // Determine body type from MBTI: NT=tall, NF=round, ST=square, SF=wide
-    const typeGroup = this._mbtiGroup(id);
-
-    // ── Legs (bobbing while moving) ──
-    const bob = Math.sin(frame * 0.3) * (1.5);
-    ctx.fillStyle = this._darken(color, 0.3);
-    ctx.fillRect(cx - 3 * SC, cy + 5 * SC, 2 * SC, 3 * SC);
-    ctx.fillRect(cx + 1 * SC, cy + 5 * SC, 2 * SC, 3 * SC);
-    // Feet
-    ctx.fillStyle = '#222';
-    ctx.fillRect(cx - 4 * SC, cy + 8 * SC, 3 * SC, 1 * SC);
-    ctx.fillRect(cx + 1 * SC, cy + 8 * SC, 3 * SC, 1 * SC);
-
-    // ── Body ──
-    const bodyW = typeGroup === 'SF' ? 8 : typeGroup === 'NF' ? 7 : 6;
-    const bodyH = typeGroup === 'NT' ? 7 : 6;
-    const bodyX = cx - (bodyW / 2) * SC;
-    const bodyY = cy - 2 * SC;
-    ctx.fillStyle = color;
-    ctx.fillRect(bodyX, bodyY, bodyW * SC, bodyH * SC);
-
-    // Body detail (belt/buttons for ST/NT, scarf for NF)
-    if (typeGroup === 'ST' || typeGroup === 'NT') {
-      ctx.fillStyle = this._darken(color, 0.2);
-      ctx.fillRect(bodyX + 1, bodyY + 3 * SC, (bodyW - 2) * SC, 1 * SC); // belt
-    }
-    if (typeGroup === 'NF') {
-      ctx.fillStyle = this._lighten(color, 0.3);
-      ctx.fillRect(bodyX, bodyY, bodyW * SC, 1 * SC); // scarf/collar
-    }
-    if (typeGroup === 'SF') {
-      ctx.fillStyle = this._lighten(color, 0.2);
-      ctx.fillRect(bodyX + bodyW * SC - 2 * SC, bodyY, 2 * SC, 2 * SC); // pocket
-    }
-
-    // ── Arms ──
-    ctx.fillStyle = this._darken(color, 0.15);
-    ctx.fillRect(bodyX - 1 * SC, bodyY + 1 * SC, 1 * SC, 3 * SC);
-    ctx.fillRect(bodyX + bodyW * SC, bodyY + 1 * SC, 1 * SC, 3 * SC);
-
-    // ── Head ──
-    ctx.fillStyle = '#F5D0A9';
-    ctx.fillRect(cx - 3 * SC, cy - 8 * SC + bob, 6 * SC, 5 * SC);
-
-    // ── Hair ──
-    ctx.fillStyle = this._darken(color, 0.35);
-    const hairStyle = this._hairStyle(id);
-    for (const [hx, hy] of hairStyle) {
-      ctx.fillRect(cx + hx * SC, cy - 8 * SC + bob + hy * SC, SC, SC);
-    }
-
-    // ── Eyes ──
-    const eyes = {
-      confident: [[-1,0],[1,0]], calm: [[-1,0],[0,0]], worried: [[-2,0],[1,0]],
-      excited: [[-2,-1],[1,-1]], panicked: [[-2,0],[2,0]],
-    };
-    const ep = eyes[mood] || eyes.calm;
-    ctx.fillStyle = '#111';
-    for (const [ex, ey] of ep) {
-      ctx.fillRect(cx + ex * SC, cy - 5 * SC + bob + ey * SC, 1 * SC, 1 * SC);
-    }
-
-    // ── Mouth ──
-    const mouths = {
-      confident: [0,1,0], calm: [0,0,1], worried: [-1,1,1], excited: [1,1,1], panicked: [0,2,2],
-    };
-    const mp = mouths[mood] || mouths.calm;
-    ctx.fillStyle = '#111';
-    ctx.fillRect(cx - mp[2] * SC / 2, cy - 2 * SC + bob + mp[1] * SC, Math.max(1, mp[2] * SC), 1 * SC);
-    if (mp[0] < 0) {
-      ctx.fillRect(cx - 2 * SC, cy - 3 * SC + bob, 1 * SC, 1 * SC);
-    }
-    if (mp[0] > 0) {
-      ctx.fillRect(cx + 1 * SC, cy - 3 * SC + bob, 1 * SC, 1 * SC);
-    }
-
-    // ── White outline ──
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(bodyX - 1, bodyY - 1, bodyW * SC + 2, bodyH * SC + 2);
-    // Head outline
-    ctx.strokeRect(cx - 4 * SC, cy - 9 * SC + bob, 8 * SC, 6 * SC);
-  }
-
-  // ── Observer sprite: distinctive shapes ────────────────────
-  _drawObserverSprite(ctx, cx, cy, id, mood) {
-    const SC = 2;
-    if (id === 'physicist') {
-      // Telescope on tripod
-      ctx.fillStyle = '#3A3A5A';
-      ctx.fillRect(cx - 1, cy - 4, 2, 8); // body
-      ctx.fillStyle = '#7B9ECF';
-      ctx.fillRect(cx - 3, cy - 6, 2, 3); ctx.fillRect(cx + 1, cy - 6, 2, 3); // coat
-      ctx.fillStyle = '#F5D0A9';
-      ctx.fillRect(cx - 2, cy - 7, 4, 3); // head (looking at telescope)
-      ctx.fillStyle = '#111';
-      ctx.fillRect(cx - 1, cy - 6, 1, 1); ctx.fillRect(cx + 0, cy - 6, 1, 1); // eyes
-    } else if (id === 'mathematician') {
-      // Chalkboard with equations
-      ctx.fillStyle = '#4A4A6A';
-      ctx.fillRect(cx - 4, cy - 3, 8, 1); // board
-      ctx.fillStyle = '#9E7BCF';
-      ctx.fillRect(cx - 1, cy - 5, 2, 6); // body
-      ctx.fillStyle = '#F5D0A9';
-      ctx.fillRect(cx - 2, cy - 7, 4, 3); // head
-      ctx.fillStyle = '#111';
-      ctx.fillRect(cx - 1, cy - 6, 1, 1); ctx.fillRect(cx + 0, cy - 6, 1, 1);
-      // equations on board
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(cx - 2, cy - 2, 4, 1);
-    } else if (id === 'mystic') {
-      // Crystal ball on table
-      ctx.fillStyle = '#6A3A6A';
-      ctx.fillRect(cx - 3, cy - 2, 6, 6); // table
-      ctx.fillStyle = 'rgba(207,123,174,0.6)';
-      ctx.beginPath(); ctx.arc(cx, cy - 2, 4, 0, Math.PI * 2); ctx.fill(); // ball
-      ctx.fillStyle = '#CF7BAE';
-      ctx.fillRect(cx - 1, cy - 6, 2, 4); // body
-      ctx.fillStyle = '#F5D0A9';
-      ctx.fillRect(cx - 2, cy - 8, 4, 3); // head
-      ctx.fillStyle = '#111';
-      ctx.fillRect(cx - 1, cy - 7, 1, 1); ctx.fillRect(cx + 0, cy - 7, 1, 1);
-    }
-  }
-
-  // ── MBTI group classification ──────────────────────────────
-
-  _mbtiGroup(id) {
-    const nt = ['INTJ','INTP','ENTJ','ENTP'];
-    const nf = ['INFJ','INFP','ENFJ','ENFP'];
-    const st = ['ISTJ','ISTP','ESTJ','ESTP'];
-    const sf = ['ISFJ','ISFP','ESFJ','ESFP'];
-    if (nt.includes(id)) return 'NT';
-    if (nf.includes(id)) return 'NF';
-    if (st.includes(id)) return 'ST';
-    if (sf.includes(id)) return 'SF';
-    return 'NT';
-  }
-
-  _hairStyle(id) {
-    const g = this._mbtiGroup(id);
-    const seed = id.charCodeAt(0) + id.charCodeAt(2);
-    if (g === 'NT') {
-      // Short, angular
-      return [[-2,0],[-1,-1],[0,-1],[1,-1],[2,0]];
-    } else if (g === 'NF') {
-      // Fluffy, wider
-      return [[-3,0],[-2,-1],[-1,-2],[0,-2],[1,-2],[2,-1],[3,0]];
-    } else if (g === 'ST') {
-      // Flat, practical
-      return [[-2,0],[-1,-1],[0,-1],[1,-1],[2,0]];
-    } else {
-      // Wavy
-      return [[-2,-1],[-1,-1],[0,-2],[1,-1],[2,-1],[1,0],[-1,0]];
-    }
-  }
-
-  _lighten(hex, f) {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `rgb(${Math.min(255,Math.floor(r+r*f))},${Math.min(255,Math.floor(g+g*f))},${Math.min(255,Math.floor(b+b*f))})`;
-  }
-
-  _tradeMood(trade) {
-    if (trade.reason === 'panic_sell') return 'panicked';
-    if (trade.reason === 'profit_take') return 'excited';
-    if (trade.direction === 'BUY') return 'confident';
-    if (trade.direction === 'SELL') return 'worried';
-    return 'calm';
-  }
-
-  _drawTradeIndicator(ctx, cx, cy, trade) {
-    const y = cy - 22;
-    const alpha = Math.max(0, 1 - (this._animFrame - trade.tick) / 60);
-    if (alpha <= 0.1) return;
-
-    if (trade.reason === 'panic_sell') {
-      // Red exclamation
-      ctx.fillStyle = `rgba(255,60,60,${alpha})`;
-      ctx.font = 'bold 10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('!', cx, y + 8);
-    } else if (trade.direction === 'BUY') {
-      // Green upward arrow
-      ctx.fillStyle = `rgba(78,204,163,${alpha})`;
-      ctx.font = 'bold 10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('▲', cx, y + 8);
-    } else if (trade.direction === 'SELL') {
-      // Red downward arrow
-      ctx.fillStyle = `rgba(233,69,96,${alpha})`;
-      ctx.font = 'bold 10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('▼', cx, y + 8);
-    }
-    if (trade.reason === 'profit_take') {
-      // Gold dollar sign
-      ctx.fillStyle = `rgba(240,192,64,${alpha})`;
-      ctx.font = 'bold 8px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('$', cx, y + 6);
-    }
-  }
-
-  _makePal(hex) {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
+  _getMoodGlow(mood) {
     return {
-      dark: `rgb(${Math.floor(r*0.35)},${Math.floor(g*0.35)},${Math.floor(b*0.35)})`,
-      mid: hex,
-      light: `rgb(${Math.min(255,r+80)},${Math.min(255,g+80)},${Math.min(255,b+80)})`,
-      skin: '#F5D0A9',
-    };
+      confident: 'rgba(78,204,163,0.35)',
+      calm: 'rgba(90,158,212,0.25)',
+      worried: 'rgba(240,160,64,0.35)',
+      excited: 'rgba(240,200,64,0.45)',
+      panicked: 'rgba(232,72,85,0.45)',
+    }[mood] || 'rgba(136,136,136,0.2)';
   }
 
-  // ── Conversations ───────────────────────────────────────────
+  // ── Trader sprite (Star-Office-UI style) ────────────────
+
+  _drawTraderAt(ctx, cx, cy, id, mood, color, activity) {
+    const c = this._pal(color);
+    const bob = activity === 'moving' ? Math.sin(this._t * 0.25) * 2 : 0;
+    const isPanic = mood === 'panicked';
+    const isExcited = mood === 'excited';
+
+    // Legs with bobbing
+    ctx.fillStyle = this._darken(color, 0.25);
+    ctx.fillRect(cx - 3, cy + 4 + bob, 2, 4);
+    ctx.fillRect(cx + 1, cy + 4 - bob, 2, 4);
+    // Feet
+    ctx.fillStyle = P.black;
+    ctx.fillRect(cx - 4, cy + 7, 3, 1.5);
+    ctx.fillRect(cx + 1, cy + 7, 3, 1.5);
+
+    // Body
+    const bw = 8, bh = 7;
+    const bx = cx - bw / 2, by = cy - 3 + bob * 0.5;
+    ctx.fillStyle = c.mid;
+    ctx.fillRect(bx, by, bw, bh);
+
+    // Arms (wider when excited)
+    const armSpread = isExcited ? 3 : 1;
+    ctx.fillStyle = c.mid;
+    ctx.fillRect(bx - armSpread, by + 1, 1, 3);
+    ctx.fillRect(bx + bw + armSpread - 1, by + 1, 1, 3);
+
+    // Head
+    ctx.fillStyle = P.skinLight;
+    ctx.fillRect(cx - 3, cy - 9 + bob, 6, 5);
+
+    // Hair
+    ctx.fillStyle = c.light;
+    const h = [[-2,-1],[-1,-2],[0,-2],[1,-2],[2,-1]];
+    for (const [hx, hy] of h) ctx.fillRect(cx + hx, cy - 9 + bob + hy, 1, 1);
+
+    // Eyes
+    ctx.fillStyle = P.black;
+    ctx.fillRect(cx - 2, cy - 6 + bob, 1, 1);
+    ctx.fillRect(cx + 1, cy - 6 + bob, 1, 1);
+
+    // Mouth
+    const mouths = { confident: [0,1,2], calm: [-2,2,2], worried: [0,0,1], excited: [-2,1,3], panicked: [0,2,3] };
+    const m = mouths[mood] || mouths.calm;
+    ctx.fillRect(cx + m[0], cy - 3 + bob + m[1], m[2], 1);
+
+    // White outline
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(bx - 1, by - 1, bw + 2, bh + 2);
+  }
+
+  // ── Observer sprite ─────────────────────────────────────
+
+  _drawObserverAt(ctx, cx, cy, id) {
+    if (id === 'physicist') {
+      ctx.fillStyle = '#3A3A5A';
+      ctx.fillRect(cx - 1, cy - 3, 2, 7);
+      ctx.fillStyle = '#7B9ECF';
+      ctx.fillRect(cx - 3, cy - 5, 2, 3); ctx.fillRect(cx + 1, cy - 5, 2, 3);
+      ctx.fillStyle = P.skinLight;
+      ctx.fillRect(cx - 2, cy - 6, 4, 3);
+      ctx.fillStyle = P.black;
+      ctx.fillRect(cx - 1, cy - 5, 1, 1); ctx.fillRect(cx + 0, cy - 5, 1, 1);
+    } else if (id === 'mathematician') {
+      ctx.fillStyle = '#4A4A6A';
+      ctx.fillRect(cx - 4, cy - 2, 8, 1);
+      ctx.fillStyle = '#9E7BCF';
+      ctx.fillRect(cx - 1, cy - 4, 2, 6);
+      ctx.fillStyle = P.skinLight;
+      ctx.fillRect(cx - 2, cy - 6, 4, 3);
+      ctx.fillStyle = P.black;
+      ctx.fillRect(cx - 1, cy - 5, 1, 1); ctx.fillRect(cx + 0, cy - 5, 1, 1);
+      ctx.fillStyle = P.white;
+      ctx.fillRect(cx - 2, cy - 1, 4, 1);
+    } else {
+      ctx.fillStyle = '#6A3A6A';
+      ctx.fillRect(cx - 3, cy - 1, 6, 5);
+      ctx.fillStyle = 'rgba(207,123,174,0.5)';
+      ctx.beginPath(); ctx.arc(cx, cy - 2, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#CF7BAE';
+      ctx.fillRect(cx - 1, cy - 5, 2, 4);
+      ctx.fillStyle = P.skinLight;
+      ctx.fillRect(cx - 2, cy - 7, 4, 3);
+      ctx.fillStyle = P.black;
+      ctx.fillRect(cx - 1, cy - 6, 1, 1); ctx.fillRect(cx + 0, cy - 6, 1, 1);
+    }
+  }
+
+  // ── Conversations (Star-Office-UI speech bubbles) ────────
 
   _drawConversations() {
     const ctx = this.ctx;
     for (const conv of this.conversations) {
-      const positions = [];
+      const pts = [];
       for (const pid of conv.participants) {
         const a = this.agents[pid];
-        if (a) positions.push({ x: a.tileX * TILE_PX + TILE_PX / 2, y: a.tileY * TILE_PX + TILE_PX / 2 });
+        if (a) pts.push({ x: a.tx * TILE_PX + TILE_PX / 2, y: a.ty * TILE_PX + TILE_PX / 2 });
       }
-      if (positions.length < 2) continue;
+      if (pts.length < 2) continue;
 
-      const mx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
-      const my = positions.reduce((s, p) => s + p.y, 0) / positions.length;
-
-      // Thin connection lines
-      for (let i = 0; i < positions.length; i++) {
-        for (let j = i + 1; j < positions.length; j++) {
-          ctx.strokeStyle = 'rgba(255,240,150,0.25)';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([3, 3]);
-          ctx.beginPath();
-          ctx.moveTo(positions[i].x, positions[i].y);
-          ctx.lineTo(positions[j].x, positions[j].y);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-      }
-
-      // Speech bubble
-      const lastLine = conv.lines[conv.lines.length - 1];
-      const text = lastLine
-        ? lastLine.speaker + ': ' + lastLine.content
-        : '...';
-      const short = text.length > 28 ? text.slice(0, 26) + '..' : text;
+      const mx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+      const my = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+      const last = conv.lines[conv.lines.length - 1];
+      const text = last ? last.speaker + ': ' + last.content : '';
+      const short = text.length > 24 ? text.slice(0, 22) + '..' : text;
 
       ctx.font = '5px monospace';
       const tw = ctx.measureText(short).width;
-      const bw = Math.max(tw + 14, 50);
-      const bh = 15;
-      const bx = mx - bw / 2;
-      const by = my - 38;
+      const bw = Math.max(tw + 14, 50), bh = 14;
+      const bx = mx - bw / 2, by = my - 34;
 
-      // Bubble body
-      ctx.fillStyle = 'rgba(20,20,40,0.92)';
+      ctx.fillStyle = 'rgba(16,16,32,0.92)';
       ctx.fillRect(bx, by, bw, bh);
-      ctx.strokeStyle = '#556';
+      ctx.strokeStyle = '#445';
       ctx.lineWidth = 1;
       ctx.strokeRect(bx, by, bw, bh);
-      // Bubble tail
-      ctx.fillStyle = 'rgba(20,20,40,0.92)';
+      ctx.fillStyle = 'rgba(16,16,32,0.92)';
       ctx.beginPath();
       ctx.moveTo(bx + bw / 2 - 4, by + bh);
       ctx.lineTo(bx + bw / 2, by + bh + 5);
       ctx.lineTo(bx + bw / 2 + 4, by + bh);
       ctx.fill();
-      ctx.strokeStyle = '#556';
-      ctx.beginPath();
-      ctx.moveTo(bx + bw / 2 - 4, by + bh);
-      ctx.lineTo(bx + bw / 2, by + bh + 5);
-      ctx.stroke();
-
-      ctx.fillStyle = '#e0e0e0';
+      ctx.fillStyle = '#ddd';
       ctx.fillText(short, bx + 7, by + 10);
     }
   }
 
-  // ── Weather ─────────────────────────────────────────────────
+  // ── Interaction ─────────────────────────────────────────
 
-  _drawWeather() {
-    const ctx = this.ctx;
-    const hour = this._worldHour;
-
-    // Rain (occasional, based on world time hash)
-    const rainChance = ((hour * 7) % 10) < 2 ? 1 : 0; // ~20% chance
-    if (rainChance) {
-      ctx.fillStyle = 'rgba(150,180,210,0.4)';
-      for (const d of this._rainDrops) {
-        ctx.fillRect(d.x, d.y, 1, d.len);
-      }
-    }
-
-    // Fireflies at night/evening
-    if (hour < 6 || hour > 20) {
-      const alpha = hour < 6 ? (6 - hour) / 6 : (hour - 20) / 4;
-      for (const f of this._fireflies) {
-        const pulse = Math.sin(f.phase) * 0.5 + 0.5;
-        const a = alpha * pulse * 0.8;
-        ctx.fillStyle = `rgba(240,240,100,${a})`;
-        ctx.fillRect(f.x - 1, f.y - 1, f.radius, f.radius);
-      }
-    }
-
-    // Birds during day
-    if (hour > 7 && hour < 17 && this._animFrame % 120 < 60) {
-      const bx = (this._animFrame * 0.4) % (MAP_COLS * TILE_PX + 40) - 20;
-      const by = 20 + Math.sin(this._animFrame * 0.03) * 8;
-      ctx.fillStyle = '#333';
-      ctx.fillRect(bx, by, 1, 2);
-      ctx.fillRect(bx - 3, by + 1, 1, 1);
-      ctx.fillRect(bx + 3, by + 1, 1, 1);
-      ctx.fillRect(bx + 6, by, 1, 2);
-      ctx.fillRect(bx + 3, by + 1, 1, 1);
-      ctx.fillRect(bx + 9, by + 1, 1, 1);
-    }
-  }
-
-  // ── Day/Night overlay ───────────────────────────────────────
-
-  _drawDayNightOverlay() {
-    const ctx = this.ctx;
-    const h = this._worldHour;
-
-    // Determine overlay based on time of day
-    let overlay = null;
-    if (h >= 22 || h < 5) {
-      overlay = PALETTE.night;          // Deep night 22:00-05:00
-    } else if (h >= 20) {
-      const t = (h - 20) / 2;           // Evening 20:00-22:00
-      overlay = `rgba(25,10,30,${0.15 + t * 0.4})`;
-    } else if (h < 7) {
-      const t = (7 - h) / 2;            // Dawn 05:00-07:00
-      overlay = `rgba(30,20,30,${0.1 + t * 0.4})`;
-    }
-    // Midday: no overlay
-
-    if (overlay) {
-      ctx.fillStyle = overlay;
-      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    }
-  }
-
-  // ── Interaction ─────────────────────────────────────────────
-
-  _onMouseMove(e) {
+  _mouseMove(e) {
     const rect = this.canvas.getBoundingClientRect();
     const sx = this.canvas.width / rect.width;
     const sy = this.canvas.height / rect.height;
-    const mx = (e.clientX - rect.left) * sx;
-    const my = (e.clientY - rect.top) * sy;
-    const tx = mx / TILE_PX;
-    const ty = my / TILE_PX;
-
-    let best = null, bestDist = 99;
+    const mx = (e.clientX - rect.left) * sx / TILE_PX;
+    const my = (e.clientY - rect.top) * sy / TILE_PX;
+    let best = null, bestD = 99;
     for (const [id, a] of Object.entries(this.agents)) {
-      const d = Math.hypot(a.tileX - tx, a.tileY - ty);
-      if (d < 1.6 && d < bestDist) { bestDist = d; best = id; }
+      const d = Math.hypot(a.tx - mx, a.ty - my);
+      if (d < 2 && d < bestD) { bestD = d; best = id; }
     }
     this.hoveredAgent = best;
     this.canvas.style.cursor = best ? 'pointer' : 'default';
   }
 
-  _onClick(e) {
+  _click(e) {
     if (this.hoveredAgent && this.onSelectAgent) {
       this.selectedAgent = this.hoveredAgent;
       this.onSelectAgent(this.hoveredAgent);
     }
   }
 
-  // ── Helpers ─────────────────────────────────────────────────
+  // ── Helpers ─────────────────────────────────────────────
+
+  _pal(hex) {
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return {
+      dark: `rgb(${Math.floor(r*0.35)},${Math.floor(g*0.35)},${Math.floor(b*0.35)})`,
+      mid: hex,
+      light: `rgb(${Math.min(255,r+80)},${Math.min(255,g+80)},${Math.min(255,b+80)})`,
+      skin: P.skinLight,
+    };
+  }
 
   _darken(hex, f) {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
     return `rgb(${Math.floor(r*(1-f))},${Math.floor(g*(1-f))},${Math.floor(b*(1-f))})`;
   }
 
+  _initParticles() {
+    for (let i = 0; i < 30; i++) this._rain.push({
+      x: Math.random() * MAP_COLS * TILE_PX, y: Math.random() * MAP_ROWS * TILE_PX,
+      spd: 3 + Math.random() * 5, len: 3 + Math.random() * 4,
+    });
+    for (let i = 0; i < 12; i++) this._fireflies.push({
+      x: Math.random() * MAP_COLS * TILE_PX, y: Math.random() * MAP_ROWS * TILE_PX,
+      ph: Math.random() * Math.PI * 2, spd: 0.02 + Math.random() * 0.04, r: 2 + Math.random() * 4,
+    });
+  }
 }

@@ -2,13 +2,14 @@
 
 :root {
   --bg: #1a1a2e;
-  --panel-bg: #16213e;
-  --border: #0f3460;
-  --text: #e0e0e0;
-  --accent: #e94560;
+  --panel-bg: #16263e;
+  --border: #1a4060;
+  --text: #f0ece4;
+  --accent: #e84855;
   --green: #4ecca3;
-  --red: #e94560;
-  --gold: #f0c040;
+  --red: #e84855;
+  --gold: #f0c840;
+  --blue: #5a9ed4;
 }
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
