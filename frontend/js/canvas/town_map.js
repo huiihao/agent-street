@@ -383,27 +383,38 @@ class TownMap {
       const stackIdx = posCount[key] || 0;
       posCount[key] = stackIdx + 1;
 
-      const offX = (stackIdx % 2) * 7 - 3;
-      const offY = Math.floor(stackIdx / 2) * 7 - 3;
+      // Boids-inspired circular spread (MiroFish): separation by angle
+      const angle = (stackIdx / 4) * Math.PI * 2 + (this._animFrame * 0.002);
+      const spread = 4 + stackIdx * 1.5;
+      const offX = Math.cos(angle) * spread;
+      const offY = Math.sin(angle) * spread;
       const cx = tx * TILE_PX + TILE_PX / 2 + offX;
       const cy = ty * TILE_PX + TILE_PX / 2 + offY;
       const isSelected = this.selectedAgent === id;
       const isHovered = this.hoveredAgent === id;
       const isObserver = ['physicist','mathematician','mystic'].includes(id);
 
+      // Determine activity state (Star-Office-UI inspired)
+      const trade = this._lastTrades[id];
+      const hasRecentTrade = trade && (this._animFrame - trade.tick) < 80;
+      const isChatting = this.conversations.some(c => c.participants.includes(id));
+      const activity = hasRecentTrade ? 'trading' : isChatting ? 'chatting' : a.isMoving ? 'moving' : 'idle';
+
       // ── Shadow ──
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.fillRect(cx - 6, cy + 7, 12, 3);
 
-      // ── Body sprite (2x scale, 10x14 source → 20x28 pixels) ──
+      // ── Activity indicator dot (colored by state) ──
+      const activityColors = { trading: '#f0c040', chatting: '#6baed6', moving: '#4ecca3', idle: '#555' };
+      ctx.fillStyle = activityColors[activity];
+      ctx.fillRect(cx - 7, cy - 13, 3, 3);
+
+      // ── Body sprite ──
       if (isObserver) {
         this._drawObserverSprite(ctx, cx, cy, id, a.mood);
       } else {
-        const trade = this._lastTrades[id];
-        const hasRecentTrade = trade && (this._animFrame - trade.tick) < 60;
         const tradeMood = hasRecentTrade ? this._tradeMood(trade) : null;
         this._drawTraderSprite(ctx, cx, cy, id, tradeMood || a.mood, a.color, this._animFrame);
-        // Decision indicator above head
         if (hasRecentTrade) {
           this._drawTradeIndicator(ctx, cx, cy, trade);
         }
