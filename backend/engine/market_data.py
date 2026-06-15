@@ -17,6 +17,7 @@ import requests
 import yfinance as yf
 
 from backend.config import SYMBOLS, HIST_DAYS_BACK, HIST_INTERVAL
+from backend.engine.ifind_connector import ifind_available, fetch_history
 
 # Cache directory for downloaded data
 CACHE_DIR = Path(__file__).parent.parent.parent / ".cache"
@@ -65,6 +66,27 @@ class HistoricalDataProvider:
                 return
         except Exception as e:
             print(f"  yfinance batch failed: {e}")
+
+        # ── Source 1.5: iFinD (同花顺, institutional) ──
+        if ifind_available():
+            try:
+                results = {}
+                for symbol in self.symbols:
+                    bars = fetch_history(symbol, self.days_back, self.interval)
+                    if bars:
+                        import pandas as pd
+                        rows = [{**b, "open": b["open"], "high": b["high"],
+                                 "low": b["low"], "close": b["close"],
+                                 "volume": b["volume"]} for b in bars]
+                        df = pd.DataFrame(rows).set_index("time")
+                        results[symbol] = df
+                        print(f"  [ifind] {symbol}: {len(bars)} bars")
+                if len(results) >= 3:
+                    self._build_bars(results)
+                    print(f"  => Loaded {self._total_bars} bars from iFinD")
+                    return
+            except Exception as e:
+                print(f"  iFinD failed: {e}")
 
         # ── Source 2: Alpha Vantage (free tier, reliable) ──
         av_key = self._get_alpha_vantage_key()

@@ -21,6 +21,7 @@ body {
   font-size: clamp(8px, 1.2vw, 10px);
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  transition: background 0.5s;
 }
 
 #app {

@@ -14,6 +14,11 @@ HIST_LOOP = True          # loop back to start when data runs out
 # Alpha Vantage API key (free tier: https://alphavantage.co/support/#api-key)
 ALPHA_VANTAGE_API_KEY = ""  # set via env ALPHA_VANTAGE_API_KEY or here
 
+# iFinD (同花顺) API credentials (institutional subscription required)
+# Set via env IFIND_API_KEY / IFIND_API_SECRET or here
+IFIND_API_KEY = ""
+IFIND_API_SECRET = ""
+
 # LLM integration (optional)
 LLM_ENABLED = False       # set True to enable LLM-powered agents
 LLM_API_KEY = ""          # your API key
