@@ -145,7 +145,13 @@ class StrategyEngine:
         events: list,
         tick: int,
         locations: dict[str, str] | None = None,
+        update_weights: bool = True,
     ) -> None:
+        """Record closed-trade outcomes.
+
+        ``update_weights=False`` still updates fitness, win/loss counts and the
+        closed-trade counter, which is required for imitation-only ablations.
+        """
         locations = locations or {}
         for event in events:
             genome = self.genomes.get(event.persona_id)
@@ -154,21 +160,23 @@ class StrategyEngine:
             entry_notional = max(event.entry_price * event.shares, 1.0)
             trade_return = event.realized_pnl / entry_notional
             reward = _clip(trade_return / 0.02, -1.0, 1.0)
-            boosted = locations.get(event.persona_id) == "lab"
-            lr = 0.10 * (1.7 if boosted else 1.0)
 
-            # Reward-modulated Hebbian update: a signal that supported a
-            # winning long is reinforced; a signal that supported a loser is
-            # down-weighted.
-            for gene in SIGNAL_GENES:
-                evidence = float(event.entry_context.get(gene, 0.0))
-                genome.set_signal(gene, getattr(genome, gene) + lr * reward * evidence)
-            genome.risk = _clip(genome.risk + lr * reward * 0.55, 0.05, 0.95)
-            genome.patience = _clip(genome.patience + lr * reward * 0.20, 0.05, 0.95)
-            genome.normalize()
+            if update_weights:
+                boosted = locations.get(event.persona_id) == "lab"
+                lr = 0.10 * (1.7 if boosted else 1.0)
 
-            genome.generation += 1
-            genome.adaptations += 1
+                # Reward-modulated Hebbian update: a signal that supported a
+                # winning long is reinforced; a signal that supported a loser is
+                # down-weighted.
+                for gene in SIGNAL_GENES:
+                    evidence = float(event.entry_context.get(gene, 0.0))
+                    genome.set_signal(gene, getattr(genome, gene) + lr * reward * evidence)
+                genome.risk = _clip(genome.risk + lr * reward * 0.55, 0.05, 0.95)
+                genome.patience = _clip(genome.patience + lr * reward * 0.20, 0.05, 0.95)
+                genome.normalize()
+                genome.generation += 1
+                genome.adaptations += 1
+
             genome.fitness = 0.85 * genome.fitness + 0.15 * trade_return
             if trade_return > 0:
                 genome.wins += 1
@@ -176,20 +184,21 @@ class StrategyEngine:
                 genome.losses += 1
             self.closed_trades += 1
 
-            dominant = max(SIGNAL_GENES, key=lambda gene: getattr(genome, gene))
-            if reward > 0.05:
-                action = "reinforced"
-            elif reward < -0.05:
-                action = "down-weighted"
-            else:
-                action = "fine-tuned"
-            genome.last_adaptation = (
-                f"{action} {dominant} after {trade_return:+.2%} on {event.symbol}"
-            )
-            self._record(
-                tick, event.persona_id, genome, "learn",
-                f"{action} {dominant} after {trade_return:+.2%} on {event.symbol}",
-            )
+            if update_weights:
+                dominant = max(SIGNAL_GENES, key=lambda gene: getattr(genome, gene))
+                if reward > 0.05:
+                    action = "reinforced"
+                elif reward < -0.05:
+                    action = "down-weighted"
+                else:
+                    action = "fine-tuned"
+                genome.last_adaptation = (
+                    f"{action} {dominant} after {trade_return:+.2%} on {event.symbol}"
+                )
+                self._record(
+                    tick, event.persona_id, genome, "learn",
+                    f"{action} {dominant} after {trade_return:+.2%} on {event.symbol}",
+                )
 
     # ── imitation ────────────────────────────────────────────
 

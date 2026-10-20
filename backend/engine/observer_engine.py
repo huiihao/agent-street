@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from backend.config import INITIAL_CASH, OBSERVER_REPORT_EVERY_N_TICKS
 from backend.engine.influence_network import InfluenceNetwork
@@ -27,6 +27,7 @@ class ObserverReport:
     title: str
     content: str
     confidence: float
+    data: dict = field(default_factory=dict)
 
     def to_payload(self) -> dict:
         return {
@@ -35,6 +36,7 @@ class ObserverReport:
             "title": self.title,
             "content": self.content,
             "confidence": round(self.confidence, 3),
+            "data": self.data,
         }
 
 
@@ -138,6 +140,19 @@ class ObserverEngine:
                 f"the population is at generation {int((ecosystem or {}).get('generation', 0))}."
             ),
             confidence=confidence,
+            data={
+                "orderParameter": round(alignment, 5),
+                "dispersion": round(metrics.dispersion, 6),
+                "avgVol": round(metrics.avg_vol, 6),
+                "susceptibility": round(susceptibility, 5),
+                "correlationLength": round(correlation_length, 4),
+                "activity": len(trades),
+                "mostVolatileSymbol": most_volatile[0],
+                "mostVolatileAbs": round(abs(most_volatile[1]), 6),
+                "sentiment": round(sentiment, 4),
+                "strategyDiversity": float((ecosystem or {}).get("diversity", 0.0)),
+                "generation": int((ecosystem or {}).get("generation", 0)),
+            },
         )
 
     # ── Mathematician ─────────────────────────────────────────
@@ -208,6 +223,20 @@ class ObserverEngine:
                 f"{adaptations} adaptations recorded."
             ),
             confidence=confidence,
+            data={
+                "components": len(components),
+                "largestComponent": max(components, default=0),
+                "broker": hub[0],
+                "brokerDegree": hub[1],
+                "bullish": sentiment_buckets["bullish"],
+                "bearish": sentiment_buckets["bearish"],
+                "neutral": sentiment_buckets["neutral"],
+                "symbolDiversity": round(diversity, 4),
+                "dispersion": round(metrics.dispersion, 6),
+                "dominant": dominant,
+                "adaptations": adaptations,
+                "guilds": {g["family"]: g["count"] for g in guilds},
+            },
         )
 
     @staticmethod
@@ -252,32 +281,12 @@ class ObserverEngine:
     ) -> ObserverReport:
         ids = list(personas.keys())
         n = max(len(ids), 1)
-        edges = influence.top_edges(limit=500) if influence else []
-        strong_edges = [e for e in edges if e["weight"] >= 0.3]
-        possible = max(n * (n - 1) / 2, 1)
-        density = len(strong_edges) / possible
-
-        degree = {pid: 0 for pid in ids}
-        adjacency = {pid: set() for pid in ids}
-        for edge in strong_edges:
-            a, b = edge["a"], edge["b"]
-            if a in degree and b in degree:
-                degree[a] += 1
-                degree[b] += 1
-                adjacency[a].add(b)
-                adjacency[b].add(a)
-        broker = max(degree.items(), key=lambda item: item[1]) if degree else ("?", 0)
-
-        triangles = 0
-        triples = 0
-        for a in ids:
-            neighbors = list(adjacency[a])
-            for i, b in enumerate(neighbors):
-                for c in neighbors[i + 1:]:
-                    triples += 1
-                    if c in adjacency[b]:
-                        triangles += 1
-        clustering = triangles / triples if triples else 0.0
+        trust = influence.trust_summary(threshold=0.2) if influence else {
+            "density": 0.0, "broker": "?", "brokerDegree": 0, "clustering": 0.0,
+        }
+        density = trust["density"]
+        broker = (trust["broker"], trust["brokerDegree"])
+        clustering = trust["clustering"]
 
         positive = sum(1 for memory in memories.values() if memory.get_sentiment() > 0.08)
         negative = sum(1 for memory in memories.values() if memory.get_sentiment() < -0.08)
@@ -292,22 +301,45 @@ class ObserverEngine:
         imitation_recent = sum(1 for item in recent if item.get("kind") == "imitate")
         guild_text = ", ".join(f"{g['family']} {g['count']}" for g in guilds[:5]) or "no settled guilds"
 
-        if dominant_share > 0.55 and polarization > 0.30:
-            cascade = "high — a dominant narrative is coupled to a split book"
-            intervention = (
-                "seed a dissenting, high-credibility signal at the Rumor Mill and "
-                "reduce reliance on the current broker"
-            )
-        elif polarization > 0.42:
-            cascade = "elevated — the town is arguing with itself"
-            intervention = "host a cross-guild debate at the Guild Hall with paired opponents"
-        elif density < 0.18:
-            cascade = "low but fragile — the trust graph is sparse"
-            intervention = "widen cross-location conversations before a cascade can organise"
-        else:
-            cascade = "contained — plural guilds with a connected trust graph"
-            intervention = "keep the lab's imitation rate under observation"
+        # Order-flow diagnostics. These are the behavioural signals that the
+        # experiment showed to be predictive of future correlated drawdowns;
+        # the old static composite is retained as ``cascadeScore`` for audit.
+        buy_shares = sum(t.shares for t in trades if t.direction == "BUY")
+        sell_shares = sum(t.shares for t in trades if t.direction == "SELL")
+        buy_agents = len({t.persona_id for t in trades if t.direction == "BUY"})
+        sell_agents = len({t.persona_id for t in trades if t.direction == "SELL"})
+        trade_agents = len({t.persona_id for t in trades})
+        gross_flow = buy_shares + sell_shares
+        flow_synchrony = max(buy_agents, sell_agents) / trade_agents if trade_agents else 0.0
+        flow_imbalance = abs(buy_shares - sell_shares) / gross_flow if gross_flow else 0.0
+        imitation_norm = min(1.0, imitation_recent / 3.0)
+        flow_risk_score = max(0.0, min(1.0,
+            0.55 * flow_synchrony
+            + 0.25 * imitation_norm
+            + 0.20 * dominant_share
+            - 0.15 * polarization
+        ))
+        cascade_score = max(0.0, min(1.0,
+            0.45 * dominant_share
+            + 0.35 * polarization
+            + 0.20 * (1.0 - min(1.0, density / 0.25))
+        ))
 
+        if flow_risk_score >= 0.68:
+            cascade = "high — order flow is aligned and imitation is active"
+            intervention = (
+                "encourage cross-guild disagreement at the Guild Hall and lower "
+                "the Quant Lab's imitation rate"
+            )
+        elif flow_risk_score >= 0.58:
+            cascade = "elevated — the town is moving together"
+            intervention = "inject a dissenting signal at the Rumor Mill; monitor flow alignment"
+        elif polarization >= 0.35:
+            cascade = "diffuse — disagreement is a buffer against correlated losses"
+            intervention = "preserve the disagreement; do not force consensus"
+        else:
+            cascade = "contained — flow is mixed"
+            intervention = "maintain current diversity; watch the lab"
         titles = [
             "Field Notes on Narrative Capture",
             "A Social Topology of the Trading Floor",
@@ -326,12 +358,39 @@ class ObserverEngine:
                 f"(degree {broker[1]}), clustering {clustering:.2f}. "
                 f"Strategy guilds: {guild_text}; dominant {dominant} "
                 f"({dominant_share:.0%}), diversity {diversity:.2f}. "
-                f"Polarization index {polarization:.2f}; {imitation_recent} imitation event(s) "
-                f"in the latest adaptation window. "
+                f"Polarization index {polarization:.2f} (disagreement buffer); "
+                f"{imitation_recent} imitation event(s); "
+                f"order-flow alignment {flow_synchrony:.2f}, imbalance {flow_imbalance:.2f} "
+                f"({buy_agents} buyers / {sell_agents} sellers); "
+                f"flow-risk score {flow_risk_score:.2f}. "
                 f"Cross-sectional dispersion {metrics.dispersion:.4f}; crowd field {sentiment:+.2f}. "
                 f"Cascade risk: {cascade}. Recommended intervention: {intervention}."
             ),
             confidence=confidence,
+            data={
+                "trustDensity": round(density, 4),
+                "broker": broker[0],
+                "brokerDegree": broker[1],
+                "clustering": round(clustering, 4),
+                "polarization": round(polarization, 4),
+                "positive": positive,
+                "negative": negative,
+                "dominant": dominant,
+                "dominantShare": round(dominant_share, 4),
+                "diversity": round(diversity, 4),
+                "imitationRecent": imitation_recent,
+                "flowSynchrony": round(flow_synchrony, 4),
+                "flowImbalance": round(flow_imbalance, 4),
+                "flowRiskScore": round(flow_risk_score, 4),
+                "buyAgents": buy_agents,
+                "sellAgents": sell_agents,
+                "tradeAgents": trade_agents,
+                "cascadeScore": round(cascade_score, 4),
+                "cascadeRisk": cascade,
+                "sentiment": round(sentiment, 4),
+                "dispersion": round(metrics.dispersion, 6),
+                "intervention": intervention,
+            },
         )
 
     # ── Mystic ────────────────────────────────────────────────
@@ -392,4 +451,11 @@ class ObserverEngine:
                 f"My intuition says: {random.choice(['BUY the fear.', 'SELL the greed.', 'HOLD and meditate.', 'The answer lies between two candles.'])}"
             ),
             confidence=random.uniform(0.05, 0.45),
+            data={
+                "sentiment": round(sentiment, 4),
+                "luckiest": luckiest[0],
+                "luckiestPct": round(luckiest[1], 3),
+                "unluckiest": unluckiest[0],
+                "unluckiestPct": round(unluckiest[1], 3),
+            },
         )

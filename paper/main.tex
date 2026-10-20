@@ -1,0 +1,597 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{float}
+\usepackage[round]{natbib}
+\usepackage{url}
+\usepackage{microtype}
+\usepackage[hidelinks]{hyperref}
+
+\title{Learning to Diverge, Imitating to Coordinate:\\
+An Ablation Study of Evolving Agents and Observer Validity in a Market Simulation}
+
+\author{Huiihao\thanks{Code, data, and reproduction scripts:
+\url{https://github.com/huiihao/agent-street}. The author thanks the open-source
+agent-simulation community for discussions and tooling.}}
+
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present a reproducible agent-based market simulation in which sixteen
+MBTI-flavoured traders evolve interpretable strategy genomes through reward
+learning, imitation, and mutation, while four observer agents publish structured
+reports. Using a frozen five-day, five-minute market snapshot and a
+four-condition by sixteen-seed ablation (64 runs, 300 ticks each), we find that
+reward learning reduces trade synchrony and order-flow imbalance, lowers
+cross-sectional return dispersion, increases strategy diversity, and improves
+returns and drawdowns relative to fixed priors. Imitation increases coordination: adding it to learning raises synchrony
+and worsens drawdown relative to learning alone without a significant return
+gain, while imitation alone improves returns relative to static priors but
+does not improve drawdown or strategy diversity. The population's guild
+composition shifts from a momentum/contrarian split toward a broader ecology
+that includes mean-reversion and sentiment strategies.
+We then audit the observers. The original composite cascade-risk score is not
+predictive of future synchrony, imbalance, or drawdown, and its polarization
+term points in the opposite direction from its risk label: polarization behaves
+as a disagreement buffer. A revised, order-flow-based observer score predicts
+future synchrony (Spearman $\rho=0.75$), absolute order imbalance
+($\rho=0.77$), and future drawdown magnitude ($\rho=0.61$) at the run level.
+The snapshot is validated against the source endpoint with exact bar-level
+agreement, 21 unit tests pass, and all 64 runs satisfy the wealth invariant.
+We discuss the tension between individual learning and social imitation, the
+need to validate observer metrics component-wise, and the limits of a
+single-market-regime study.
+\end{abstract}
+
+\noindent\textbf{Keywords:} agent-based markets; social learning; imitation;
+strategy evolution; observer agents; reproducibility.
+
+\section{Introduction}
+
+\citet{park2023generative} showed that a small town of language-model agents can
+produce believable social behaviour. A natural next question is what happens
+when those agents are placed in a market: do they learn from their own
+profit-and-loss record, do they copy each other's strategies, and can observer
+agents tell us anything quantitatively useful about the resulting collective
+behaviour? This paper studies those questions in a controlled, reproducible
+environment.
+
+Agent-based computational finance has a long tradition of heterogeneous,
+adaptive traders \citep{lebaron2006agent,hommes2006heterogeneous} and of
+agent-based models as a complement to equilibrium reasoning
+\citep{farmer2009economy,tesfatsion2006agent}. Herding and informational
+cascades are central mechanisms in that literature
+\citep{kirman1993ants,bikhchandani1992theory,cont2000herd}. Our contribution is
+not a new asset-pricing model. It is a deliberately inspectable testbed that
+combines (i) a validated real-market replay, (ii) evolvable strategy genomes
+with explicit accounting, and (iii) four observer agents whose structured
+reports can be evaluated against future outcomes.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+  \item We present Agent Street, a reproducible market simulation with sixteen
+  evolving traders, an explicit House market maker, strict accounting, and four
+  observer agents. The code, frozen data snapshot, experiment runner, analysis
+  scripts, and figures are public \citep{agentstreet2026}.
+  \item In a four-condition ablation on a frozen five-day real-market replay,
+  we show that individual reward learning is a \emph{diversifying} force: it
+  reduces trade synchrony and order-flow imbalance, increases strategy
+  diversity, and improves returns and drawdowns relative to fixed MBTI priors.
+  \item Social imitation is a \emph{coordinating} force: adding it to learning
+  increases synchrony and order-flow imbalance, does not significantly improve
+  returns, and worsens drawdown relative to learning alone. Imitation alone
+  improves returns relative to static priors but not drawdown or diversity.
+  The combination achieves the best aggregate return but not the lowest
+  coordination or drawdown.
+  \item We audit the observer agents and show that a plausible composite
+  cascade-risk narrative can fail. Its polarization component is associated
+  with \emph{lower} future synchronous drawdowns. A revised order-flow-based
+  score is strongly predictive of future synchrony, imbalance, and drawdown at
+  the run level. The revised score is post-hoc and is presented as a
+  hypothesis, not a validated early-warning system.
+\end{enumerate}
+
+\section{Related Work}
+
+\paragraph{Agent-based markets.}
+Heterogeneous-agent models explain excess volatility, clustering, and market
+regimes through interacting beliefs and strategies
+\citep{hommes2006heterogeneous,lebaron2006agent}. \citet{kirman1993ants} and
+\citet{bikhchandani1992theory} provide canonical mechanisms for recruitment and
+informational cascades; \citet{cont2000herd} connects herding to aggregate
+fluctuations. Our agents operate in a replay whose price path is exogenous (the
+House absorbs residual order flow), which isolates behavioural coordination
+from endogenous price impact.
+
+\paragraph{Learning and social transmission.}
+Evolutionary and reinforcement perspectives on strategy change go back to
+\citet{holland1975adaptation}; learning in games is treated by
+\citet{fudenberg1998theory}, and bounded, inductive reasoning by
+\citet{arthur1994inductive}. Cultural transmission and social learning are
+studied by \citet{boyd1985culture}, and the econometrics of social interactions
+by \citet{manski2000economic}. Our genome update is a lightweight
+reward-modulated Hebbian rule, not a claim of optimal learning; imitation is
+gated by a trust graph and a fitness comparison.
+
+\paragraph{Generative agents and observers.}
+The memory/reflection/conversation loop is inspired by
+\citet{park2023generative}. We add an explicit market, a strategy genome, an
+accounting ledger, and observers whose scalar outputs can be validated. The
+broader adaptive-markets view \citep{lo2004adaptive} motivates treating
+strategies as changing populations rather than fixed types.
+
+\section{Agent Street}
+
+\subsection{Market replay and reliability}
+
+The market layer loads a single, validated, time-aligned bar timeline. All
+symbols share one timestamp index; non-finite prices, duplicate timestamps,
+contradictory OHLC values, and obvious bad prints are removed. Bars are cached
+and can be loaded from a frozen snapshot for experiments. During a run no
+network access is used.
+
+The experimental snapshot contains 390 aligned five-minute bars for AAPL,
+GOOGL, MSFT, TSLA, and AMZN over five sessions in October 2026
+(2026-10-13 to 2026-10-19, UTC dates). Its SHA-256 is
+\texttt{3c9cf0ff864b68e6886c1f3181f67e6}\allowbreak
+\texttt{e93dbacef8102007c34fedc768c9f86fe}.
+Every symbol has 390 bars, the timestamps are strictly monotonic, and there are
+zero duplicate timestamps, non-positive prices, OHLC inconsistencies, or
+negative volumes. A re-fetch from the Yahoo chart endpoint for the same window
+matched all 390 overlapping closes exactly (maximum relative difference 0.0);
+the endpoint returned one additional post-snapshot bar. This verifies snapshot
+integrity, not independence of the upstream vendor.
+
+\subsection{Traders and strategy genomes}
+
+Sixteen MBTI-flavoured traders start with a genome containing six signal
+weights (trend, reversion, RSI, herding, influence, memory; normalized to sum
+to one) and four traits (risk, patience, contrarian, noise). A decision combines
+the shared indicators:
+\begin{align}
+  \text{trend} &= \tanh\!\left(\frac{\text{momentum}_5}{\text{vol}_{20}\sqrt{5}}\right),
+  \qquad
+  \text{reversion} = -\tanh\!\left(\frac{\text{close}-\text{SMA}_{20}}{\text{ATR}_{14}}\right),\\
+  \text{tech} &= w_{\text{trend}}\text{trend}' + w_{\text{rev}}\text{reversion}' + w_{\text{rsi}}\text{rsi},\\
+  \text{social} &= w_{\text{herd}}\text{herd} + w_{\text{inf}}\text{influence}
+  + w_{\text{mem}}\text{memory},\\
+  \text{composite} &= \text{tech}+\text{social}+\epsilon,
+\end{align}
+where the trend component is flipped by the contrarian gene and the composite
+is clipped to $[-1,1]$. Each decision cycle permits one deliberate order per
+agent. Risk controls include drawdown panic with cooldown, stop loss, profit
+taking, a minimum holding period, position caps, and per-symbol cooldowns.
+
+\paragraph{Experience learning.}
+Every buy carries the signal context that produced it. On close, the realized
+trade return $r$ becomes a reward
+\begin{equation}
+  \text{reward}=\operatorname{clip}(r/0.02,-1,1),\qquad
+  \Delta w_g=\eta\,\text{reward}\,\text{context}_g,
+\end{equation}
+with $\eta=0.10$ (1.7$\times$ at the Quant Lab). Risk and patience also adapt.
+The update is a lightweight online learner; it is not a claim of optimal
+policy learning.
+
+\paragraph{Imitation and mutation.}
+After a conversation, a lower-fitness trader may copy a blend of a higher-fitness
+playbook, gated by trust:
+\begin{equation}
+  w_g^{\text{learner}} \leftarrow 0.76\,w_g^{\text{learner}}
+  + 0.24\,w_g^{\text{teacher}} + \text{noise}.
+\end{equation}
+The Quant Lab raises the imitation probability and the Guild Hall raises it
+slightly. Every 20 ticks a small fraction of genomes explore a random
+variation.
+
+\paragraph{Accounting.}
+Orders cross internally with price/time priority and partial fills; residual
+orders are absorbed by the House at the real price $\pm$ a half-spread. Fees are
+charged per side and capitalized into average cost; sells realize P\&L against
+that cost. Every 20 ticks the engine checks
+\begin{equation}
+  \sum_i \text{cash}_i + \sum_i \text{holdings}_i\cdot p
+  + \text{House cash} + \text{House holdings}\cdot p + \text{fees}
+  = \text{constant}.
+\end{equation}
+
+\subsection{Observers}
+
+Four observers read the same state: a Physicist (order parameter, dispersion,
+susceptibility), a Mathematician (trust components, partitions, centrality), a
+Social Engineer (trust density, polarization, guilds, order flow, cascade
+risk), and a Mystic (deliberately unvalidated colour). Reports are generated
+every 20 ticks and expose structured metrics alongside prose. The experiment
+uses these structured fields, not the prose. Figure~\ref{fig:system} shows the
+interactive view; the experiments use the same engine headlessly.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.94\linewidth]{figures/fig_system.png}
+  \caption{The interactive view of Agent Street. The Three.js diorama, the
+  candles/compare/guilds chart, the Account/Strategy inspector, the
+  leaderboard, the four observer cards, and the live tape are driven by the
+  same engine used headlessly in the experiments. The visual state is not an
+  input to any experimental result.}
+  \label{fig:system}
+\end{figure}
+
+\section{Experimental Design}
+
+\subsection{Conditions and protocol}
+
+Table~\ref{tab:conditions} lists the conditions. Table~\ref{tab:reliability}
+summarizes the data and execution checks.
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{Experimental conditions. All conditions use the same frozen market
+  snapshot and the same seed set; only the strategy mechanisms differ.}
+  \label{tab:conditions}
+  \begin{tabular}{lcccc}
+    \toprule
+    Condition & P\&L learning & Imitation & Mutation & Purpose\\
+    \midrule
+    Static priors & no & no & no & Fixed MBTI genome (control)\\
+    Imitation only & no & yes & yes & Social transmission without weight learning\\
+    Learning only & yes & no & yes & Individual learning only\\
+    Full & yes & yes & yes & Complete system\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+We run 16 seeds per condition (64 runs) for 300 ticks. The replay starts after
+30 warm-up bars and does not loop. The market path is identical across all runs;
+only agent decisions and interactions differ. LLM enrichment is disabled. The
+primary outcomes are aggregate return, max drawdown magnitude, strategy
+diversity (one minus the Herfindahl index of guild counts), cross-sectional
+return standard deviation, trade synchrony (the larger buy/sell agent count
+divided by the number of trading agents), and absolute order imbalance. The
+strategy generation and adaptation count serve as a manipulation check.
+
+Statistics use paired Wilcoxon signed-rank tests blocked by seed, Holm
+correction within the six primary outcomes for each contrast, paired bootstrap
+95\% confidence intervals for mean differences, and rank-biserial effect sizes.
+Observer predictive tests use run-level Spearman correlations with 5,000
+run-cluster bootstrap resamples; report-level correlations are reported as a
+secondary view to expose pseudo-replication.
+
+\subsection{Data and reliability summary}
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{Frozen snapshot and execution reliability.}
+  \label{tab:reliability}
+  \begin{tabular}{ll}
+    \toprule
+    Item & Value\\
+    \midrule
+    Source & yfinance (Yahoo)\\
+    Interval / symbols & 5 minutes; AAPL, GOOGL, MSFT, TSLA, AMZN\\
+    Aligned bars / sessions & 390; five sessions (2026-10-13 to 2026-10-19 UTC)\\
+    Snapshot SHA-256 & \texttt{3c9cf0ff\ldots c9f86fe}\\
+    Validation & 0 duplicates, non-positive prices, OHLC contradictions,\\
+    & negative volumes; monotonic timestamps\\
+    Endpoint cross-check & 390/390 closes per symbol exact; max rel.\ diff.\ 0.0\\
+    Experiment runs & 64 runs $\times$ 300 ticks; no network; LLM disabled\\
+    Wealth invariant & 0 failures across all 64 runs\\
+    Genome / trust checks & all signal weights sum to 1; all sampled trust edges symmetric\\
+    Unit tests & 21 passing tests (data, indicators, matching, accounting, strategy)\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Results}
+
+\subsection{Manipulation and strategy dynamics}
+
+The conditions behave as intended. Mean strategy generation is 0.00 for static
+priors, 8.75 for imitation only, 78.25 for learning only, and 75.69 for the full
+system; adaptation counts are 0.0, 36.8, 612.6, and 607.8 respectively. The
+learning conditions therefore experience many more closed-trade updates than
+the imitation-only condition, while the static condition is fixed.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/fig_dynamics.pdf}
+  \caption{Twenty-tick rolling means with 95\% confidence intervals across 16
+  seeds. Learning raises strategy diversity and generation and reduces trade
+  synchrony; imitation alone raises synchrony and leaves diversity near the
+  static baseline.}
+  \label{fig:dynamics}
+\end{figure}
+
+Figure~\ref{fig:dynamics} shows the trajectories. Strategy diversity rises in
+both learning conditions after about 60 ticks, while the static condition is
+flat and imitation-only slowly declines. Trade synchrony is lower in the
+learning-only condition and highest in imitation-only near the end of the
+window. The full system sits between the two, as expected from the interaction
+of the mechanisms.
+
+\subsection{Learning versus imitation}
+
+\begin{table}[t]
+  \centering
+  \small
+  \setlength{\tabcolsep}{3.5pt}
+  \caption{Condition means and standard deviations across 16 seeds. Returns and
+  drawdowns are percentages of starting capital; return SD is the
+  cross-sectional standard deviation of trader returns in percentage points;
+  diversity, synchrony, and imbalance are unitless. Drawdown is reported as a
+  magnitude.}
+  \label{tab:means}
+  \begin{tabular}{lcccccc}
+    \toprule
+    Condition & Return (\%) & Max DD (\%) & Diversity & Return SD (pp) & Synchrony & $|$Imbalance$|$\\
+    \midrule
+    Static priors & $-0.302\pm0.053$ & $1.642\pm0.074$ & $0.555\pm0.000$ & $0.671\pm0.098$ & $0.856\pm0.011$ & $0.756\pm0.019$\\
+    Imitation only & $-0.252\pm0.056$ & $1.651\pm0.056$ & $0.553\pm0.055$ & $0.529\pm0.077$ & $0.875\pm0.014$ & $0.798\pm0.020$\\
+    Learning only & $-0.237\pm0.084$ & $1.479\pm0.071$ & $0.615\pm0.045$ & $0.519\pm0.086$ & $0.794\pm0.013$ & $0.642\pm0.026$\\
+    Full & $-0.192\pm0.082$ & $1.558\pm0.084$ & $0.624\pm0.062$ & $0.488\pm0.079$ & $0.834\pm0.017$ & $0.713\pm0.035$\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{table}[t]
+  \centering
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \caption{Paired mean differences (Holm-adjusted $p$ in parentheses) for the
+  six primary outcomes. Return and return SD are percentage points; drawdown is
+  magnitude in percentage points (positive means a larger drawdown);
+  diversity, synchrony, and imbalance are unitless. Negative drawdown
+  differences mean a smaller drawdown.}
+  \label{tab:paired}
+  \begin{tabular}{lcccc}
+    \toprule
+    Outcome & Full$-$Static & Learning$-$Static & Imitation$-$Static & Full$-$Learning\\
+    \midrule
+    Aggregate return & $+0.110$ (.003) & $+0.065$ (.018) & $+0.050$ (.032) & $+0.045$ (.536)\\
+    Max DD magnitude & $-0.084$ (.008) & $-0.163$ ($<.001$) & $+0.009$ (.751) & $+0.079$ (.021)\\
+    Strategy diversity & $+0.069$ (.008) & $+0.060$ (.004) & $-0.002$ (1.0) & $+0.009$ (.842)\\
+    Return SD & $-0.183$ (.002) & $-0.151$ (.002) & $-0.141$ (.005) & $-0.032$ (.645)\\
+    Trade synchrony & $-0.022$ (.004) & $-0.061$ ($<.001$) & $+0.020$ ($<.001$) & $+0.040$ ($<.001$)\\
+    $|$Order imbalance$|$ & $-0.043$ (.003) & $-0.114$ ($<.001$) & $+0.041$ ($<.001$) & $+0.071$ ($<.001$)\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Figure~\ref{fig:primary} shows the distributions; Table~\ref{tab:means} and
+Table~\ref{tab:paired} summarize the main result. Relative
+to static priors, both learning conditions reduce trade synchrony and order
+imbalance, increase strategy diversity, reduce cross-sectional return
+dispersion, and improve returns and drawdowns. The full system improves
+aggregate return by 0.110 percentage points (Holm $p=.003$), reduces drawdown
+magnitude by 0.084 points ($p=.008$), raises diversity by 0.069 ($p=.008$), and
+lowers return SD by 0.183 points ($p=.002$). The learning-only condition shows a
+similar pattern and the largest drawdown reduction (0.163 points, $p<.001$).
+
+Imitation has a different signature. Adding imitation to learning raises
+synchrony by 0.040 ($p<.001$) and absolute imbalance by 0.071 ($p<.001$), does
+not significantly improve aggregate return (+0.045, $p=.536$), and worsens
+drawdown magnitude by 0.079 points ($p=.021$) relative to learning alone.
+Imitation alone raises synchrony (+0.020, $p<.001$) and imbalance (+0.041,
+$p<.001$) relative to static priors, improves return (+0.050, $p=.032$) and
+reduces return SD (0.141 points, $p=.005$), but does not improve drawdown
+($+0.009$, $p=.751$) or diversity ($-0.002$, $p=1.0$). The full system achieves
+the best aggregate return in the sample, but not the lowest coordination or
+drawdown. The economic magnitudes are small; the statistically robust effects
+are behavioural.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/fig_primary.pdf}
+  \caption{Primary outcomes by condition; each point is one seed. The learning
+  conditions reduce synchrony and return dispersion and increase diversity;
+  imitation increases synchrony and does not improve drawdown.}
+  \label{fig:primary}
+\end{figure}
+
+\subsection{Guild composition}
+
+\begin{table}[t]
+  \centering
+  \small
+  \caption{Mean final guild composition (number of traders out of 16).}
+  \label{tab:guilds}
+  \begin{tabular}{lccccc}
+    \toprule
+    Condition & Momentum & Mean rev. & Sentiment & Contrarian & Balanced\\
+    \midrule
+    Static priors & 8.000 & 0.000 & 0.000 & 7.000 & 1.000\\
+    Imitation only & 8.375 & 0.812 & 0.000 & 6.375 & 0.438\\
+    Learning only & 6.750 & 0.750 & 0.875 & 7.000 & 0.625\\
+    Full & 6.062 & 1.688 & 0.312 & 7.062 & 0.875\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.86\linewidth]{figures/fig_guilds.pdf}
+  \caption{Mean guild composition. Learning creates mean-reversion and
+  sentiment niches; imitation alone mostly reshuffles the existing
+  momentum/contrarian/balanced split.}
+  \label{fig:guilds}
+\end{figure}
+
+Learning is associated with new strategy niches. The static and imitation-only
+populations remain dominated by momentum and contrarian traders; learning-only
+and full populations add mean-reversion and sentiment traders and have higher
+strategy diversity (Table~\ref{tab:guilds}, Figure~\ref{fig:guilds}). The
+full system has the largest mean-reversion guild (1.688 vs.\ 0.750 in
+learning-only) and a smaller sentiment guild (0.312 vs.\ 0.875); this is a
+compositional difference worth following in longer runs.
+
+\subsection{Observer audit}
+
+The original Social Engineer score combined dominant share, polarization, and
+low trust density:
+\begin{equation}
+  R_{\text{v1}}=0.45\,D + 0.35\,P + 0.20\,(1-\min(1,\rho_{\text{trust}}/0.25)),
+\end{equation}
+where $D$ is the dominant guild share, $P$ the polarization index, and
+$\rho_{\text{trust}}$ the trust density. The revised score uses order-flow
+alignment and treats polarization as a buffer:
+\begin{equation}
+  R_{\text{v2}}=0.55\,S + 0.25\,\min(1,I/3) + 0.20\,D - 0.15\,P,
+\end{equation}
+where $S$ is trade synchrony and $I$ the number of recent imitation events.
+
+\begin{table}[t]
+  \centering
+  \small
+  \setlength{\tabcolsep}{3.5pt}
+  \caption{Run-level Spearman correlations between observer metrics at the
+  report tick and outcomes over the next 20 ticks ($n=64$ runs; run means).
+  $p$-values are two-sided. The v1 composite is not predictive; the v2
+  flow-risk score is. Polarization is associated with lower future drawdown
+  magnitude, i.e.\ it behaves as a disagreement buffer.}
+  \label{tab:observer}
+  \begin{tabular}{lccc}
+    \toprule
+    Predictor & Future synchrony & Future $|$imbalance$|$ & Future $|$drawdown$|$\\
+    \midrule
+    v1 composite risk & $0.029$ (.82) & $0.044$ (.73) & $-0.133$ (.30)\\
+    v2 flow risk & $0.754$ ($6.5\times10^{-13}$) & $0.769$ ($1.1\times10^{-13}$) & $0.609$ ($9.5\times10^{-8}$)\\
+    Flow synchrony & $0.673$ ($1.1\times10^{-9}$) & $0.673$ ($1.1\times10^{-9}$) & $0.492$ ($3.6\times10^{-5}$)\\
+    Flow imbalance & $0.710$ ($5.1\times10^{-11}$) & $0.711$ ($4.4\times10^{-11}$) & $0.474$ ($7.6\times10^{-5}$)\\
+    Imitation events & $0.585$ ($3.8\times10^{-7}$) & $0.623$ ($3.9\times10^{-8}$) & $0.526$ ($8.1\times10^{-6}$)\\
+    Polarization & $-0.556$ ($1.8\times10^{-6}$) & $-0.540$ ($4.2\times10^{-6}$) & $-0.546$ ($3.0\times10^{-6}$)\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/fig_observer.pdf}
+  \caption{Run-level observer validation. The v1 composite is uninformative and
+  its polarization sign is reversed relative to the risk label; the v2
+  flow-based score tracks future drawdown magnitude. Each point is one run
+  mean; regression lines are shown.}
+  \label{fig:observer}
+\end{figure}
+
+Table~\ref{tab:observer} and Figure~\ref{fig:observer} summarize the audit. The
+audit is the most cautionary result. The v1 composite is not predictive of
+future synchrony ($\rho=0.029$, $p=.82$), imbalance ($\rho=0.044$, $p=.73$), or
+drawdown magnitude ($\rho=-0.133$, $p=.30$). Its polarization term is
+\emph{negatively} associated with future synchronous drawdowns
+($\rho=-0.546$, $p=3.0\times10^{-6}$), the opposite of its risk interpretation:
+a split town is less likely to suffer a correlated drawdown. At the report
+level, the v1 composite is negatively associated with future drawdown
+magnitude ($\rho=-0.170$, $p=1.2\times10^{-7}$), confirming the sign reversal.
+
+The v2 flow-risk score is positively associated with future synchrony
+($\rho=0.754$, $p=6.5\times10^{-13}$), absolute order imbalance
+($\rho=0.769$, $p=1.1\times10^{-13}$), and drawdown magnitude
+($\rho=0.609$, $p=9.5\times10^{-8}$) at the run level. The report-level
+correlation with drawdown is weaker ($\rho=0.095$, $p=.003$), as expected when
+much of the between-run variance is averaged away. The flow-risk score is
+post-hoc: it was designed after observing the v1 failure on the same runs.
+It should therefore be treated as a hypothesis and tested on independent
+windows before being used as an early-warning system.
+
+\subsection{Reliability}
+
+All 64 runs satisfy the wealth invariant exactly, all genomes normalize to one,
+all sampled trust edges are symmetric, all conversation participants are valid,
+all trades have positive shares and prices, and all recorded metrics are finite.
+Changing the observer logic from v1 to v2 left every agent-level metric
+bit-identical, confirming that observers do not feed back into trading. The
+snapshot cross-check is exact for all 390 overlapping closes. The 21 unit tests
+cover the data, indicator, matching, accounting, and strategy layers.
+
+\section{Discussion}
+
+The central tension is between individual learning and social imitation.
+Learning gives agents different experiences and moves their genomes apart: it
+raises strategy diversity, lowers trade synchrony, and reduces cross-sectional
+return dispersion. Imitation pulls them together: it raises synchrony and
+order-flow imbalance and does not significantly improve returns in the full
+system. The full system has the best aggregate return in the sample but a
+larger drawdown than learning alone. A system designer who optimizes only
+return may choose the full mechanism; one who cares about correlated downside
+risk may prefer learning-only or a lower imitation rate.
+
+The observer audit has a broader methodological implication. The original
+composite was internally coherent and produced plausible prose, yet it failed
+out of sample in the forward direction. Its polarization component had the
+wrong sign. This is exactly the kind of failure that narrative reports can hide:
+the prose sounds like risk analysis, but the scalar does not track the outcome.
+Observers should be evaluated component-wise, against future outcomes, at the
+run level, with multiple seeds. The revised score is a useful hypothesis, but it
+is not yet a validated warning system.
+
+The economic magnitudes are small. The window is a single declining market, and
+the House pins prices to the replay; agents cannot move the market. The results
+are about behaviour and coordination, not profitability or alpha. A real
+deployment would need multiple regimes, market impact, shorting, and an
+independent intraday data source.
+
+\section{Limitations}
+
+\begin{itemize}
+  \item \textbf{Single window and regime.} Five sessions of five US large caps in
+  October 2026, in a declining market. The effects may not generalize.
+  \item \textbf{Exogenous prices.} The House absorbs residual order flow so the
+  town price equals the replay price. This isolates behaviour but removes
+  endogenous price impact.
+  \item \textbf{Asset and trading scope.} Long-only, five symbols, 5-minute bars,
+  fixed fees and spread; no shorting, options, borrow costs, or volume limits.
+  \item \textbf{Post-hoc observer revision.} The v2 score was motivated by the
+  v1 audit on the same runs. Its strong run-level correlation is promising but
+  not a pre-registered independent validation.
+  \item \textbf{Data independence.} The snapshot is yfinance; the cross-check
+  uses the same Yahoo upstream. No independent intraday vendor was available.
+  \item \textbf{Rule-based agents and observers.} LLM enrichment was disabled;
+  LLM-powered agents may show different dynamics and observer behaviour.
+  \item \textbf{No financial claim.} This is a simulation, not investment
+  advice, and the returns are not an alpha claim.
+\end{itemize}
+
+\section{Conclusion}
+
+In a controlled replay of real market bars, individual reward learning made a
+population of evolving traders more diverse and less coordinated and improved
+downside outcomes relative to fixed MBTI priors. Adding social imitation to
+learning increased coordination and did not significantly improve returns; the
+combination produced the best aggregate return but a worse drawdown than
+learning alone. Imitation alone improved returns relative to static priors but
+not drawdown or diversity.
+The observer audit showed that a plausible composite risk narrative can fail,
+while an order-flow-based signal predicts future synchrony, imbalance, and
+drawdown. Agent-based market simulations are most useful as behavioural
+laboratories when they report coordination and diversity explicitly, validate
+observer scalars against outcomes, and avoid mistaking narrative coherence for
+predictive validity.
+
+\section*{Data and code availability}
+
+Code, the frozen market snapshot, the experiment runner, the analysis scripts,
+and all figures are available at
+\url{https://github.com/huiihao/agent-street}. The snapshot SHA-256 is
+\texttt{3c9cf0ff864b68e6886c1f3181f67e6}\allowbreak
+\texttt{e93dbacef8102007c34fedc768c9f86fe}.
+Reproduction:
+\begin{verbatim}
+python experiments/run_experiment.py
+python experiments/analyze_results.py
+python -m unittest discover -s tests -v
+\end{verbatim}
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+
+\end{document}

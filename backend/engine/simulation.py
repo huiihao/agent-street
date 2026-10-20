@@ -84,7 +84,17 @@ OBSERVER_DEFS = {
 
 
 class SimulationLoop:
-    def __init__(self):
+    def __init__(
+        self,
+        seed: int | None = None,
+        enable_learning: bool = True,
+        enable_imitation: bool = True,
+        enable_mutation: bool = True,
+    ):
+        self.seed = SIM_SEED if seed is None else int(seed)
+        self.enable_learning = bool(enable_learning)
+        self.enable_imitation = bool(enable_imitation)
+        self.enable_mutation = bool(enable_mutation)
         self.tick = 0
         self.running = False
         self.personas: dict[str, PersonaState] = {}
@@ -146,8 +156,8 @@ class SimulationLoop:
         self.stop()
         if self.market.loaded:
             self.market.reset_index()
-        if SIM_SEED:
-            random.seed(SIM_SEED)
+        if self.seed:
+            random.seed(self.seed)
         self.tick = 0
         self._init_all()
         self._initialized = True
@@ -176,8 +186,8 @@ class SimulationLoop:
         if self.market.loaded:
             self.indicators.warmup(self.market.warmup_history())
 
-        if SIM_SEED:
-            random.seed(SIM_SEED)
+        if self.seed:
+            random.seed(self.seed)
 
         for pid, defn in PERSONA_DEFINITIONS.items():
             self.personas[pid] = PersonaState(
@@ -209,6 +219,23 @@ class SimulationLoop:
                         f"Market open — {symbol} at ${bar.close:.2f}",
                         "price", 0.45, self.tick, sentiment=0.0,
                     )
+
+    async def run_headless(self, ticks: int):
+        """Run ``ticks`` steps without real-time sleeps or a WebSocket.
+
+        This is the experiment entry point: callers provide a loaded market
+        provider (e.g. a frozen snapshot), seed the simulation, and collect
+        frames through ``on_frame``. No background loop is created.
+        """
+        if not self.market.loaded:
+            await self.market.fetch_init()
+        if not self._initialized:
+            self.market.reset_index()
+            self._init_all()
+            self._initialized = True
+        for _ in range(max(0, int(ticks))):
+            await self._do_tick()
+        return self._last_frame
 
     def set_speed(self, multiplier: float) -> None:
         self._speed_multiplier = max(0.1, min(MAX_SPEED, float(multiplier)))
@@ -303,9 +330,10 @@ class SimulationLoop:
                         sentiment=turn.sentiment_effect,
                     )
             self.influence_network.record_conversation(conv.participants, self.tick)
-            self.strategy_engine.imitate(
-                conv.participants, self.influence_network, self.tick, loc_id,
-            )
+            if self.enable_imitation:
+                self.strategy_engine.imitate(
+                    conv.participants, self.influence_network, self.tick, loc_id,
+                )
 
         # 5. Trading decisions
         all_intents = []
@@ -323,14 +351,17 @@ class SimulationLoop:
 
         # 6. Matching
         outcome = self.matching_engine.match(all_intents, snap, self.personas, self.house)
-        if outcome.closed_events:
+        if outcome.closed_events and (self.enable_learning or self.enable_imitation):
             locations = {
                 event.persona_id: self.routines[event.persona_id].current_location_id()
                 for event in outcome.closed_events
                 if event.persona_id in self.routines
             }
-            self.strategy_engine.observe_closes(outcome.closed_events, self.tick, locations)
-        if self.tick % 20 == 0:
+            self.strategy_engine.observe_closes(
+                outcome.closed_events, self.tick, locations,
+                update_weights=self.enable_learning,
+            )
+        if self.enable_mutation and self.tick % 20 == 0:
             self.strategy_engine.mutate(self.tick)
         trades = outcome.trades
         traded_agents: set[str] = set()

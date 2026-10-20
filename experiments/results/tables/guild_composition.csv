@@ -1,0 +1,5 @@
+condition,momentum,mean_reversion,sentiment,contrarian,balanced
+static,8.0,0.0,0.0,7.0,1.0
+imitation_only,8.375,0.8125,0.0,6.375,0.4375
+no_imitation,6.75,0.75,0.875,7.0,0.625
+full,6.0625,1.6875,0.3125,7.0625,0.875

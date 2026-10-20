@@ -52,6 +52,7 @@ has drifted to 33% mean reversion after sixteen generations of live trading.</su
 15. [Project layout](#project-layout)
 16. [Design notes and limits](#design-notes-and-limits)
 17. [Acknowledgments](#acknowledgments)
+- [Research artifact](#research-artifact)
 
 ---
 
@@ -69,6 +70,34 @@ publish competing readings of the same system.
 The visual layer is not a mock-up: the Three.js town is generated from the same
 `TOWN_MAP` that drives pathfinding; the candles are the bars the agents actually see;
 the tape is the fills that actually moved cash.
+
+---
+
+## Research artifact
+
+The repository also contains a reproducible empirical study of the simulation:
+
+- **Frozen data**: 390 aligned five-minute bars for AAPL, GOOGL, MSFT, TSLA and
+  AMZN over five sessions, cross-checked bar-for-bar against the source endpoint
+  (`experiments/data/`, SHA-256 in the metadata).
+- **Ablation**: 4 conditions (static priors, imitation only, learning only, full) ×
+  16 seeds × 300 ticks = 64 runs; zero wealth-invariant failures.
+- **Report**: [`experiments/REPORT.md`](experiments/REPORT.md).
+- **Paper**: [`paper/main.tex`](paper/main.tex), with figures and an arXiv build
+  guide in [`paper/README.md`](paper/README.md).
+
+**Headline findings.** Individual reward learning is a *diversifying* force: it
+reduces trade synchrony and order-flow imbalance, lowers cross-sectional return
+dispersion, increases strategy diversity, and improves returns and drawdowns
+relative to fixed MBTI priors. Social imitation is a *coordinating* force:
+adding it to learning raises synchrony and imbalance, does not significantly
+improve returns, and worsens drawdown relative to learning alone; imitation
+alone improves returns relative to static priors but not drawdown or diversity. The original
+Social Engineer composite risk score was not predictive; its polarization term
+had the wrong sign. A revised order-flow-based score predicts future synchrony
+(ρ = 0.75), absolute order imbalance (ρ = 0.77), and future drawdown magnitude
+(ρ = 0.61) at the run level. The revised score is post-hoc and is presented as a
+hypothesis for independent validation, not a validated warning system.
 
 ---
 
@@ -260,13 +289,16 @@ Each trader starts with a genome derived from its MBTI dimensions. The genome is
 |---|---|---|---|
 | 🔭 **Physicist** | statistical mechanics | order parameter, dispersion, susceptibility, correlation length, strategy diversity | 70–85% |
 | 📐 **Mathematician** | graph theory | trust components, centrality, sentiment partition, guild composition, diversity | 75–95% |
-| 🧩 **Social Engineer** | social systems | trust density, broker concentration, clustering, polarization, imitation flow, cascade risk, interventions | 66–90% |
+| 🧩 **Social Engineer** | social systems | trust density, broker concentration, clustering, polarization, **order-flow alignment**, imitation flow, **flow-risk score**, interventions | 66–90% |
 | 🔮 **Mystic** | tea leaves | cosmic resonance, karmic debt, the Dao of market coupling | 5–45% |
 
 Observers do not trade. They publish roughly every 20 ticks. The Social Engineer also
 reads the **strategy ecosystem**: guild counts, dominant playbook, mutation/imitation
-events, and the latest adaptation. Its reports include a concrete intervention, e.g.
-*"seed a dissenting signal at the Rumor Mill"* when narrative lock-in rises.
+events, order-flow alignment, and the latest adaptation. Its reports include a concrete
+intervention, e.g. *"encourage cross-guild disagreement at the Guild Hall"* when flow
+alignment rises. The original composite cascade score was audited and replaced by a
+flow-based score in the experiment; see the research artifact above. The revised score is
+post-hoc and should be validated on independent windows.
 
 ---
 
@@ -392,9 +424,12 @@ cluster near the Trading Floor, a broker who bridges both, a quiet lab agent who
 weights are drifting — these are the visible footprints of the social system.
 
 The Social Engineer's report reads the same data differently: trust density, broker
-degree, clustering coefficient, polarization, imitation count and a cascade-risk
-assessment. The Mathematician reads partitions and components. The Physicist reads
-order parameters and susceptibility. Four lenses, one system.
+degree, clustering coefficient, polarization, order-flow alignment, imitation count and
+a flow-risk score (polarization is treated as a disagreement buffer). The Mathematician
+reads partitions and components. The Physicist reads order parameters and susceptibility.
+The original composite cascade score was audited against future outcomes and replaced by
+the flow-based score; the revision is post-hoc and needs independent validation.
+Four lenses, one system.
 
 ---
 
@@ -585,6 +620,19 @@ agent-street/
 │   ├── test_indicators.py
 │   ├── test_matching.py
 │   └── test_strategy.py
+├── experiments/
+│   ├── data/                    # frozen snapshot + provenance metadata
+│   ├── results/                 # v2 CSVs, tables, results.json
+│   ├── results_v1/              # v1 observer reports for the audit
+│   ├── figures/                 # PDF/PNG figures
+│   ├── run_experiment.py        # 64-run ablation
+│   ├── analyze_results.py       # statistics + figures
+│   └── REPORT.md
+├── paper/
+│   ├── main.tex                 # arXiv-style manuscript
+│   ├── refs.bib
+│   ├── README.md                # build / arXiv notes
+│   └── figures/
 ├── docs/
 │   ├── screenshot.png
 │   ├── screenshot-guilds.png

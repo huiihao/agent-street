@@ -204,6 +204,44 @@ class InfluenceNetwork:
                 break
         return result
 
+    def trust_summary(self, threshold: float = 0.2) -> dict:
+        """Undirected trust-graph summary with a meaningful density.
+
+        ``top_edges`` is directed; counting it directly against the number of
+        undirected pairs double-counts each relationship. This summary builds
+        an undirected adjacency at a configurable threshold and returns density,
+        broker degree and clustering.
+        """
+        ids = list(self.edges)
+        n = len(ids)
+        adjacency = {pid: set() for pid in ids}
+        for a, targets in self.edges.items():
+            for b, edge in targets.items():
+                if edge.weight >= threshold:
+                    adjacency.setdefault(a, set()).add(b)
+                    adjacency.setdefault(b, set()).add(a)
+        degree = {pid: len(neighbors) for pid, neighbors in adjacency.items()}
+        broker, broker_degree = max(degree.items(), key=lambda item: item[1]) if degree else ("?", 0)
+        triangles = 0
+        triples = 0
+        for pid in ids:
+            neighbors = list(adjacency.get(pid, ()))
+            for i, b in enumerate(neighbors):
+                for c in neighbors[i + 1:]:
+                    triples += 1
+                    if c in adjacency.get(b, ()):
+                        triangles += 1
+        density = sum(degree.values()) / (n * (n - 1)) if n > 1 else 0.0
+        return {
+            "n": n,
+            "density": density,
+            "broker": broker,
+            "brokerDegree": broker_degree,
+            "clustering": triangles / triples if triples else 0.0,
+            "meanDegree": sum(degree.values()) / max(n, 1),
+            "edges": sum(degree.values()) // 2,
+        }
+
     def top_edges(self, limit: int = 40) -> list[dict]:
         """Strongest trust links, for observers and optional visualisations."""
         edges = []

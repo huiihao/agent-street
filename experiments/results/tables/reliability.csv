@@ -1,0 +1,11 @@
+check,value
+runs,64
+invariant_failures,0
+all_weight_sums_ok,True
+all_trust_symmetric,True
+all_conversation_participants_ok,True
+all_trades_valid,True
+all_tick_metrics_finite,True
+snapshot_sha256,3c9cf0ff864b68e6886c1f3181f67e6e93dbacef8102007c34fedc768c9f86fe
+snapshot_bars,390
+crosscheck_all_exact,True

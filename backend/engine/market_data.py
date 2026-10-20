@@ -290,6 +290,17 @@ class HistoricalDataProvider:
         span = max(self._total_bars - self._start_offset, 1)
         return min(1.0, max(0.0, (self._index - self._start_offset) / span))
 
+    def load_snapshot(self, payload: dict, label: str | None = None) -> None:
+        """Load a frozen, previously validated cache payload without network I/O."""
+        original = str(payload.get("source", "unknown"))
+        self._install_from_cache(payload, stale=False)
+        if not self.loaded:
+            raise RuntimeError("snapshot could not be installed")
+        self.source = label or f"snapshot:{original}"
+        self.from_cache = False
+        self.stale = False
+        self.warnings = []
+
     def source_info(self) -> dict:
         return {
             "source": self.source,

@@ -1,0 +1,52 @@
+{
+  "started_at": "2026-10-20T08:57:19.460012+00:00",
+  "ticks": 300,
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16
+  ],
+  "conditions": {
+    "full": {
+      "enable_learning": true,
+      "enable_imitation": true,
+      "enable_mutation": true
+    },
+    "no_imitation": {
+      "enable_learning": true,
+      "enable_imitation": false,
+      "enable_mutation": true
+    },
+    "imitation_only": {
+      "enable_learning": false,
+      "enable_imitation": true,
+      "enable_mutation": true
+    },
+    "static": {
+      "enable_learning": false,
+      "enable_imitation": false,
+      "enable_mutation": false
+    }
+  },
+  "snapshot_sha256": "3c9cf0ff864b68e6886c1f3181f67e6e93dbacef8102007c34fedc768c9f86fe",
+  "snapshot_source": "yfinance",
+  "snapshot_bars": 390,
+  "snapshot_first_utc": "2026-10-13T13:30:00+00:00",
+  "snapshot_last_utc": "2026-10-19T19:55:00+00:00",
+  "finished_at": "2026-10-20T08:57:57.391382+00:00",
+  "elapsed_sec": 37.93,
+  "runs_completed": 64
+}
