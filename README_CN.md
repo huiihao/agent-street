@@ -2,52 +2,393 @@
 
 <img src="https://img.shields.io/badge/python-3.10+-blue?style=flat-square&logo=python" alt="Python">
 <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
-<img src="https://img.shields.io/badge/status-active-brightgreen?style=flat-square" alt="Status">
-<img src="https://img.shields.io/badge/agents-19-ff69b4?style=flat-square" alt="Agents">
-<img src="https://img.shields.io/badge/LLM-optional-orange?style=flat-square" alt="LLM">
+<img src="https://img.shields.io/badge/agents-20-ff69b4?style=flat-square" alt="Agents">
+<img src="https://img.shields.io/badge/renderer-Three.js%20r160-5ad1ff?style=flat-square" alt="Three.js">
+<img src="https://img.shields.io/badge/tests-21-success?style=flat-square" alt="Tests">
 
 </div>
 
-<h1 align="center">
-  🏘️ Agent Street · 小人镇
-</h1>
+<h1 align="center">AGENT STREET</h1>
 
 <p align="center">
-  <i>像素风模拟小镇：19 个 AI Agent 在这里生活、聊天、炒股。</i>
+  <i>一座会学习的 3D 市场小镇：16 位 MBTI 交易员从盈亏中积累经验、<br>
+  模仿同伴、变异策略，形成策略公会；4 位观察者从外部解读这一切。</i>
+</p>
+
+<p align="center">
+  <sub><a href="README.md">📖 English</a> · <a href="#快速开始">快速开始</a> · <a href="#架构">架构</a> · <a href="#策略进化">策略进化</a></sub>
+</p>
+
+---
+
+> **核心想法：** 策略不应该是配置文件里的常数。它应该由角色在真实行情回放中
+> **赚到、借来、变异、甚至失去**。Agent Street 把这件事放到一座可旋转、可点击、
+> 可检查的立体小镇里，并保证每一笔资金都能对上账。
+
+![Agent Street](docs/screenshot.png)
+
+<p align="center"><sub>黄昏中的小镇。选中的交易员打开 <b>Strategy</b> 标签，展示经过 16 代
+实盘交易后漂移到 33% 均值回归权重的策略基因组。</sub></p>
+
+---
+
+## 目录
+
+1. [你会看到什么](#你会看到什么)
+2. [三个认真对待的问题](#三个认真对待的问题)
+3. [架构](#架构)
+4. [小镇](#小镇)
+5. [交易员与观察者](#交易员与观察者)
+6. [策略进化](#策略进化)
+7. [市场计算与撮合](#市场计算与撮合)
+8. [Guilds：阅读涌现的策略场](#guilds阅读涌现的策略场)
+9. [界面](#界面)
+10. [快速开始](#快速开始)
+11. [配置](#配置)
+12. [数据管线](#数据管线)
+13. [API](#api)
+14. [测试](#测试)
+15. [目录结构](#目录结构)
+16. [设计说明与边界](#设计说明与边界)
+17. [致谢](#致谢)
+
+---
+
+## 你会看到什么
+
+每个 tick 推进一根经过校验的历史 K 线。16 位交易员看到同一份横截面数据，形成记忆、
+与邻居交谈，并提交限价单。House 做市商吸收所有无法撮合的剩余订单，因此小镇报价
+始终等于真实回放价。成交结束后，收益被归因到当初产生这笔交易的信号上，策略基因组
+随之漂移；对话可以把更好的玩法从一个角色传给另一个角色。小镇逐渐聚成动量、均值回归、
+情绪和逆向等策略公会。4 位观察者——物理学家、数学家、社会工程学家、神秘主义者——
+用完全不同的语言解读同一个系统。
+
+视觉层不是贴图：Three.js 小镇由驱动寻路的同一份 `TOWN_MAP` 生成；K 线就是角色看到的
+真实 K 线；成交带里的每一笔都真实改变了现金。
+
+---
+
+## 三个认真对待的问题
+
+### 1. 经得起推敲的数据
+
+- **一条时间轴。** 所有标的使用同一个对齐时间索引，标的之间的横截面关系是真实的。
+- **先校验再仿真。** 剔除 NaN/非正价格、重复时间戳、OHLC 矛盾和明显坏点；保证
+  `high ≥ max(open, close)`、`low ≤ min(open, close)`。
+- **缓存，而不是祈祷。** 对齐后的数据以原子写入保存到 `.cache/bars_*.json`
+  （15 分钟 TTL）。热启动约 50ms，Yahoo 暂时不可用也能继续。
+- **诚实的降级链。** `yfinance → Yahoo Chart → iFinD（可选）→ 过期缓存 → 带共同
+  市场因子的合成数据`。UI 永远明确显示 **LIVE / CACHED / SYNTHETIC**，不会把假数据
+  伪装成实时行情。
+- **读取无副作用。** `GET /api/market` 与 `/api/market/history` 永不推进回放。
+
+### 2. 能对上的资金账本
+
+- 限价校验、价格/时间优先、部分成交、角色间直接成交、House 按真实价 ± 半价差吸收。
+- 每边手续费计入持仓成本；卖出计算已实现盈亏；清空零股。
+- 独立追踪 House 现金、持仓和手续费池。
+- 每 20 ticks 校验：
+
+  ```
+  Σ 角色现金 + Σ 持仓×价格 + House 现金 + House 持仓×价格 + 手续费 = 常数
+  ```
+
+- 开发运行中守恒失败次数保持 0；测试覆盖手续费、部分成交、加权成本、已实现盈亏、
+  胜率与资金守恒。
+
+### 3. 会进化的策略
+
+- 每位交易员有一个**基因组**：6 个信号权重 + 风险、耐心、逆向、噪声 4 个特征。
+- 每笔平仓都是一次学习事件：收益被归因到入场时存在的信号分量；支持过盈利交易的
+  权重上升，支持过亏损交易的权重下降。
+- 对话可以进行**模仿**：信任关系和相对适应度决定是否借用更好的玩法；Quant Lab
+  会提高学习率。
+- 小概率**变异**防止种群塌缩成单一策略。
+- 策略被归类为公会，并在 Guilds 视图中呈现为一个不断变化的场。
+
+---
+
+## 架构
+
+```mermaid
+flowchart LR
+  subgraph DATA["行情数据"]
+    Y["yfinance 批量"] --> V["校验 · 对齐 · 缓存"]
+    R["Yahoo Chart API"] --> V
+    I["iFinD（可选）"] --> V
+    C["过期缓存"] --> V
+    S["合成数据"] --> V
+    V --> B["统一对齐的 K 线时间轴"]
+  end
+
+  subgraph ENGINE["仿真引擎"]
+    IND["共享指标"]
+    DEC["基因组加权决策"]
+    MAT["撮合 + House"]
+    STR["策略进化"]
+    IND --> DEC --> MAT --> STR
+    STR --> DEC
+  end
+
+  B --> IND
+  STR --> WS["FastAPI / WebSocket 帧"]
+  WS --> UI["Three.js 小镇 · 图表 · 面板"]
+  UI -- "开始 / 停止 / 倍速" --> WS
+```
+
+```mermaid
+sequenceDiagram
+  participant D as 数据
+  participant S as 仿真
+  participant A as 角色
+  participant M as 撮合 / House
+  participant E as 策略引擎
+  participant U as 浏览器
+
+  D->>S: 下一根对齐 K 线
+  S->>A: 价格 + 共享指标
+  A->>S: 限价单（基因组加权）
+  S->>M: 意图
+  M->>M: 直接成交 / 部分成交
+  M->>M: House 吸收剩余
+  M-->>S: 成交 + 平仓事件
+  S->>E: 已实现收益 + 入场信号上下文
+  E->>A: 强化 / 模仿 / 变异
+  S-->>U: 帧（小镇、图表、成交带、公会）
+```
+
+---
+
+## 小镇
+
+20×14 的立体底座，完整路网，以及三个新的社交枢纽，共 15 个地点。
+
+```
+图例：  . 草地   = 横向道路   | 纵向道路   # 建筑
+         * 树    ~ 水面      : 人行道
+
+***...|.....|....***
+*.....|.....|......*
+..###.|.###.|.###...
+..###.|.###.|.###...
+====================
+......|.....|.......
+..##..|.###.|..##...
+..##..|.###.|..##...
+::::::|:::::|:::::::
+...*..|..~~.|..*....
+...*..|..~~.|..*....
+::::::|:::::|:::::::
+......|.###.|.......
+.**..*|.###.|*..**..
+```
+
+| 地点 | 中心 | 作用 |
+|---|---|---|
+| 🔵 Blue Roof House | (3, 2) | INTJ · INTP · ENTJ · ENTP |
+| 🔴 Red Roof House | (9, 2) | INFJ · INFP · ENFJ · ENFP |
+| 🟢 Green Roof House | (15, 2) | ISTJ · ISFJ · ESTJ · ESFJ |
+| 🟤 Yellow Roof House | (2, 6) | ISTP · ISFP · ESTP · ESFP |
+| ☕ Morning Brew Cafe | (9, 6) | 社交、羊群效应 |
+| 📚 Data Library | (15, 6) | 安静分析 |
+| 📊 Trading Floor | (2, 9) | 快速反应 |
+| 🌿 Willow Park | (11, 9) | 独立思考 |
+| 🌳 Town Square | (9, 12) | 人群勇气 |
+| 🔭 Observatory | (17, 10) | 物理学家 |
+| 📐 Math Tower | (18, 2) | 数学家 |
+| 🔮 Fortune Tent | (1, 11) | 神秘主义者 |
+| **📰 Rumor Mill** | **(5, 5)** | **羊群 +25%，反应更快** |
+| **🧪 Quant Lab** | **(13, 10)** | **技术权重更高，学习率提升** |
+| **🏛️ Guild Hall** | **(5, 10)** | **辩论、联盟与模仿** |
+
+新地点不是装饰：
+
+- **Rumor Mill** 提高羊群权重和反应速度，叙事在这里传播得最快。
+- **Quant Lab** 提高技术权重与持有期；在实验室里完成的平仓获得 **1.7× 学习率加成**。
+- **Guild Hall** 提高羊群与风险偏好，对话中的模仿概率略升；它也是社会工程师的驻地。
+
+昼夜循环独立于市场时钟：每个回放日从清晨走到深夜，伴随发光窗户、路灯、星空、萤火虫
+和偶发降雨。Three.js r160 已本地 vendor，无需构建步骤。
+
+---
+
+## 交易员与观察者
+
+### 16 位 MBTI 交易员
+
+每位交易员的初始基因组来自 MBTI 维度。基因组是**先验**，不是宿命：它会被盈亏修改、
+被同伴模仿、被随机变异。
+
+| ID | 名称 | 交易直觉 | 常去 |
+|---|---|---|---|
+| INTJ | 建筑师 | 量化分析师，在形态形成前看见形态 | 📚 |
+| INTP | 逻辑学家 | 数据强迫症，要十个确认信号才动手 | 📚 |
+| ENTJ | 指挥官 | 把市场当战场 | 📊 |
+| ENTP | 辩论家 | 天生反骨，专和市场共识对着干 | ☕ |
+| INFJ | 提倡者 | 像读病人一样读市场情绪 | 🌿 |
+| INFP | 调停者 | 按图表的视觉和谐感交易 | 🌿 |
+| ENFJ | 主人公 | 社区领袖，大家会跟随他的判断 | 🌳 |
+| ENFP | 竞选者 | 每一笔交易都是“下一个大机会” | ☕ |
+| ISTJ | 物流师 | 退休会计，流程大于噪音 | 📊 |
+| ISFJ | 守卫者 | 本金安全高于一切 | 🏠 |
+| ESTJ | 总经理 | 军事化纪律，讨厌犹豫 | 📊 |
+| ESFJ | 执政官 | FOMO 驱动，别人买什么就买什么 | 🌳 |
+| ISTP | 鉴赏家 | 机械师，午休时精准进场 | ☕ |
+| ISFP | 探险家 | 音乐人，按节奏和手感交易 | 🌿 |
+| ESTP | 企业家 | 前扑克选手，靠波动率吃饭 | ☕ |
+| ESFP | 表演者 | 每笔交易都是一场演出 | 🌳 |
+
+### 4 位观察者
+
+| 观察者 | 视角 | 读取内容 | 置信度 |
+|---|---|---|---|
+| 🔭 **物理学家** | 统计力学 | 序参量、离散度、磁化率、关联长度、策略多样性 | 70–85% |
+| 📐 **数学家** | 图论 | 信任连通分量、中心性、情绪分区、公会构成、多样性 | 75–95% |
+| 🧩 **社会工程学家** | 社会系统 | 信任密度、经纪人集中度、聚类、极化、模仿流、级联风险、干预建议 | 66–90% |
+| 🔮 **神秘主义者** | 茶叶 | 宇宙共振、因果业力、市场耦合之道 | 5–45% |
+
+观察者不交易，大约每 20 ticks 发布一次报告。社会工程学家还会读取**策略生态**：
+公会数量、主导玩法、变异/模仿事件、最新适应记录，并给出具体干预建议，例如在叙事
+锁定风险上升时“去 Rumor Mill 投放一个可信的异议信号”。
+
+---
+
+## 策略进化
+
+每位交易员拥有一个可检查的小型基因组：
+
+```
+信号权重：  trend · reversion · RSI · herding · influence · memory   （总和 = 1）
+特征：      risk · patience · contrarian · noise
+谱系：      generation · wins · losses · adaptations · lastAdaptation
+```
+
+### 1. 先验
+
+`genome_from_persona()` 把 MBTI 参数翻译成初始基因组。逆向型内向者一开始有更高的
+均值回归权重；外向情感型一开始更依赖羊群和记忆。
+
+### 2. 经验学习
+
+每次买入都会携带产生它的信号上下文。平仓时，已实现收益变成奖励：
+
+```
+reward    = clip(单笔收益率 / 2%, -1, 1)
+Δw_signal = η · reward · 入场信号
+```
+
+盈利后支持过这笔交易的信号权重上升；亏损后下降。风险与耐心也会适应。这是一个
+轻量级的在线奖励调制学习器，不宣称 alpha，只负责让行为可见地变化。
+
+### 3. 模仿
+
+对话之后，适应度较低的交易员可能借用更高适应度交易员的玩法：
+
+```
+learner_gene ← 0.76 · learner_gene + 0.24 · teacher_gene + 变异
+```
+
+信任图决定概率；Quant Lab 提供较大加成，Guild Hall 提供小幅加成。策略公会就是这样
+形成的。
+
+### 4. 变异
+
+每 20 ticks，一小部分基因组会探索随机变异。主导信号发生变化的变异会以“公会漂移”
+出现在观察者报告中。
+
+### 5. 公会
+
+基因组被分类为 **动量**、**均值回归**、**情绪**、**逆向** 或 **平衡**。最终得到的不是
+固定人格排行榜，而是一个会分裂、聚集、模仿和漂移的种群。
+
+<p align="center">
+  <img src="docs/screenshot-strategy.png" alt="进化后的策略面板" width="520">
   <br>
-  <i>16 个 MBTI 交易员 + 3 个观察者。真实股票数据。脆弱均衡被反复打破。</i>
-</p>
-
-<p align="center">
-  <sub><a href="README.md">📖 English Docs</a></sub>
+  <sub>Strategy 标签：公会、代数、适应度、学习到的信号权重与特征。</sub>
 </p>
 
 ---
 
-## 💡 核心概念
+## 市场计算与撮合
+
+### 信号
+
+共享指标引擎为每个标的、每个 tick 计算：
 
 ```
-外部真实K线  ──强制投射──→  🏪 小镇股市
-                                │
-     ┌──────────────────────────┼──────────────────────────┐
-     ▼              ▼           ▼              ▼           ▼
-  🧠 观察·反思  💬 交谈·传播  📈 人格驱动  🔭📐🔮 观察者
-     记忆         情绪         交易           分析报告
-     │              │           │              │
-     └──────────────┼───────────┘              │
-                    ▼                          │
-          ⚖️ 对冲引擎 (House 做市商)            │
-          吸收净差额 → 股价 ≡ 真实股价           │
-                    │                          │
-                    ▼                          │
-    🔄 脆弱均衡 → 打破 → 新均衡 → 再打破 ← 观察者记录
+trend       = tanh(momentum_5 / (realised_vol × √5))
+reversion   = -tanh((close − SMA20) / ATR14)
+rsi_signal  = (50 − RSI14) / 50
+social      = herding · herd + influence · trust + memory · memory_sentiment
+composite   = Σ genome_weights × signals + 有界噪声
 ```
 
-> 历史 K 线逐根推进。Agent 观察涨跌、生成反思、彼此交谈、下单买卖。所有净买卖额由 House 做市商吸收，保证小镇股价始终等于真实股价。Agent 情绪与真实走势之间的张力，形成**不断被打破的脆弱平衡**——物理学家称之为"临界现象"，数学家画成"交互图"，玄学高手称之为"道的流转"。
+基因组权重之和为 1，因此加噪前 composite 始终位于 `[-1, 1]`。逆向型会翻转趋势分量、
+放大回归分量。每个决策周期每位角色最多提交一笔主动订单，避免开盘刷单。
+
+### 撮合与 House
+
+```mermaid
+flowchart TD
+  A["角色买卖意图"] --> B{"限价可交叉?"}
+  B -->|是| C["角色间成交<br/>价格/时间优先，可部分成交"]
+  B -->|否| D["House 吸收剩余<br/>真实价 ± 半价差"]
+  C --> E["成交 + 平仓事件"]
+  D --> E
+  E --> F["手续费 → 手续费池<br/>买入 → 加权成本<br/>卖出 → 已实现盈亏"]
+  F --> G["资金守恒校验"]
+```
+
+House 让小镇报价始终等于真实回放价。角色不推动市场——这是刻意设计；他们争夺的是
+执行、情绪和生存。一次回放循环会开启**新赛季**：组合、记忆、观察者和策略谱系同步
+重置，保证跨循环边界的账本一致。
+
+### 风险指标
+
+每位交易员现在会报告 **最大回撤**、**平仓胜率** 和 **平仓次数**，与权益、现金、
+已实现/未实现盈亏一起显示在 Account 标签。
 
 ---
 
-## 🚀 快速开始
+## Guilds：阅读涌现的策略场
+
+![Guilds 视图](docs/screenshot-guilds.png)
+
+**Guilds** 标签把策略种群变成一个场：
+
+- x 轴：趋势权重；y 轴：均值回归权重
+- 每个点是一位交易员，颜色表示公会，大小表示代数
+- 适应度最高的点带直接标签；悬停任意点查看完整基因组
+- 图例显示公会人数、平均适应度和最新适应记录
+- 顶部显示生态代数和主导玩法
+
+聚类是有意义的。Rumor Mill 附近的逆向集群、Trading Floor 附近的动量集群、桥接两侧的
+经纪人、在实验室里悄悄漂移的权重——这些都是社会系统的可见足迹。
+
+社会工程学家用另一种方式读取同一份数据：信任密度、经纪人度数、聚类系数、极化、
+模仿次数和级联风险评估。数学家读取分区与连通分量。物理学家读取序参量与磁化率。
+四种视角，一个系统。
+
+---
+
+## 界面
+
+| 面板 | 内容 |
+|---|---|
+| **The Town** | Three.js 小镇；拖拽旋转、滚轮缩放、悬停/点击角色 |
+| **Market** | **Candles**（K 线 + 成交量 + MA9/MA21）、**Compare**（归一化对比）、**Guilds**（策略场） |
+| **Leaderboard** | 按市值计价的权益、收益率、当前公会代码；点击查看角色 |
+| **Stats strip** | 总权益、群体情绪仪表、广度、交易手续费 |
+| **Agent · Account** | 权益曲线、现金、已实现/未实现盈亏、持仓、最大回撤、胜率、平仓次数、组合信号、持仓、想法 |
+| **Agent · Strategy** | 公会、代数、适应度、学习到的信号权重、风险/耐心/逆向/噪声、最新适应记录 |
+| **Observers** | 四张卡片：物理学家、数学家、社会工程学家、神秘主义者，带置信度 |
+| **Tape** | 实时成交：方向、数量、价格、原因、对手方、手续费、cross/house |
+
+快捷键：**Space** 开始/停止 · **R** 重置 · **C** 复位镜头。
+
+---
+
+## 快速开始
 
 ```bash
 git clone https://github.com/huiihao/agent-street.git
@@ -56,202 +397,202 @@ pip install -r requirements.txt
 python run.py
 ```
 
-浏览器打开 **http://localhost:8765**，点击 **START**。
+打开 **http://localhost:8766**，点击 **Start**。
 
-✅ 无需 API key，开箱即用。
-
----
-
-## 🤖 接入 LLM（可选，推荐）
-
-配置环境变量后，Agent 的反思和对话由 LLM 生成：
+- ✅ 不需要任何 API Key
+- 📡 默认使用 yfinance / Yahoo 公共接口；缓存存在时优先使用缓存
+- 🧪 完全离线时会明确切换到带标注的合成数据
+- 🎨 Three.js 已放在 `frontend/vendor/three`，无需 npm 或打包
 
 ```bash
+# 测试
+python -m unittest discover -s tests -v
+```
+
+---
+
+## 配置
+
+所有配置均可用环境变量覆盖，默认值在 `backend/config.py`。
+
+| 变量 | 默认 | 含义 |
+|---|---|---|
+| `SYMBOLS` | `AAPL,GOOGL,MSFT,TSLA,AMZN` | 股票池（逗号分隔） |
+| `INITIAL_CASH` | `10000` | 每位交易员初始资金 |
+| `TICK_INTERVAL_SEC` | `1.5` | 每根 K 线的真实秒数 |
+| `MAX_SPEED` | `20` | 最高倍速 |
+| `BUY_THRESHOLD` / `SELL_THRESHOLD` | `0.12` / `-0.10` | 组合信号阈值 |
+| `MAX_POSITION_PCT` | `0.32` | 单标的仓位上限（再乘风险系数） |
+| `FEE_BPS` / `SLIPPAGE_BPS` | `2` / `3` | 手续费与 House 半价差（基点） |
+| `HIST_DAYS_BACK` | `5` | 加载多少个交易日 |
+| `HIST_INTERVAL` | `5m` | `1m / 5m / 15m / 30m / 1h` |
+| `WARMUP_BARS` | `30` | 回放前预热的 K 线数 |
+| `CACHE_TTL_SEC` | `900` | 缓存新鲜期 |
+| `DATA_SOURCE` | `auto` | `auto / yfinance / yahoo_chart / ifind / alphavantage / synthetic` |
+| `SIM_SEED` | `7` | 决策/合成数据随机种子（`0` = 随机） |
+| `ALPHA_VANTAGE_API_KEY` | 空 | 仅在显式数据源时使用 |
+| `IFIND_API_KEY` / `IFIND_API_SECRET` | 空 | 可选机构版同花顺 |
+| `LLM_ENABLED` | `false` | 后台 LLM 反思增强 |
+| `LLM_API_KEY` | 空 | OpenAI 兼容 Key |
+| `LLM_BASE_URL` / `LLM_MODEL` | OpenAI / `gpt-4o-mini` | 任意兼容端点 |
+| `LLM_CONVERSATIONS` | `false` | 是否让 LLM 生成对话 |
+
+```powershell
 # Windows PowerShell
-$env:LLM_ENABLED="true"
-$env:LLM_API_KEY="sk-xxxxxxxxxxxxx"
-$env:LLM_MODEL="gpt-4o-mini"
+$env:SYMBOLS="AAPL,NVDA,META"
+$env:HIST_INTERVAL="1m"
+$env:DATA_SOURCE="yfinance"
+python run.py
+```
 
+```bash
 # Linux / macOS
-export LLM_ENABLED=true
-export LLM_API_KEY="sk-xxxxxxxxxxxxx"
+SYMBOLS=AAPL,NVDA,META HIST_INTERVAL=1m python run.py
 ```
 
-兼容任意 OpenAI 格式 API：
+---
 
-| 后端 | `LLM_BASE_URL` |
+## 数据管线
+
+```mermaid
+flowchart TD
+  A["DATA_SOURCE=auto"] --> B{"是否有新鲜真实缓存?"}
+  B -->|是| C["使用缓存中的对齐 K 线"]
+  B -->|否| D["yfinance 批量"]
+  D -->|失败| E["Yahoo Chart API"]
+  E -->|失败| F["iFinD（若已配置）"]
+  F -->|失败| G["过期缓存"]
+  G -->|失败| H["带相关性的合成 K 线<br/>（明确标注）"]
+```
+
+| 关注点 | 实现 |
 |---|---|
-| OpenAI | `https://api.openai.com/v1` |
-| DeepSeek | `https://api.deepseek.com/v1` |
-| Anthropic (代理) | `https://api.anthropic.com/v1` |
-| Ollama (本地) | `http://localhost:11434/v1` |
-| vLLM / LM Studio | `http://localhost:8000/v1` |
-
-没有 API key？规则模板自动接管。
-
----
-
-## 🏘️ 小镇地图（12 个地点）
-
-```
-         ┌──────────┐  ┌──────────┐  ┌──────────┐    ┌──────────┐
-         │ 🏠 蓝屋顶 │  │ 🏠 红屋顶 │  │ 🏠 绿屋顶 │    │ 📐 数学塔 │
-         │INTJ INTP │  │INFJ INFP │  │ISTJ ISFJ │    │(观察者)  │
-         │ENTJ ENTP │  │ENFJ ENFP │  │ESTJ ESFJ │    └──────────┘
-         └──────────┘  └──────────┘  └──────────┘
-         ═══════════════════════════════════════════════  ← 主路
-         ┌─────┐    ┌──────────┐              ┌──────────┐
-         │ ☕   │    │ 🏠 黄屋顶 │              │ 📚 图书馆 │
-         │咖啡馆│    │ISTP ISFP │              └──────────┘
-         └─────┘    │ESTP ESFP │
-         ═══════════┴──────────╩════════════════════════
-    ┌──────────┐  ┌──────────┐  ┌────┐         ┌──────────┐
- 🔮 │ 占卜帐篷 │  │📊交易大厅│  │🌿  │         │ 🔭 天文台 │
-    └──────────┘  └──────────┘  │公园│         └──────────┘
-         ═══════════════════════╡    │
-              ┌────────────┐
-              │ 🌳 中心广场 │
-              └────────────┘
-```
+| 时区 | K 线统一为 UTC；回放时钟以 `America/New_York` 展示 |
+| 对齐 | 时间戳取交集；缺口用有限前向填充的并集兜底 |
+| 校验 | 有限/正价格、OHLC 修复、坏影线过滤、去重 |
+| 历史 | 只保留最近 `HIST_DAYS_BACK` 个交易日 |
+| 缓存 | `.cache/bars_{interval}_{days}_{hash}.json`，原子写入，15 分钟 TTL |
+| 透明度 | 来源、缓存时间、警告、被丢弃标的通过 `/api/status` 与 UI 暴露 |
+| 预热 | 回放开始前先消费 `WARMUP_BARS` 根 K 线，保证指标有效 |
 
 ---
 
-## 👥 Agent 介绍
+## API
 
-### 16 个 MBTI 交易员
-
-每个人格通过数学映射推导出 10 个交易参数：
-
-| 🎨 | ID | 名称 | 风格 | 常去 |
-|---|---|---|---|---|
-| `#4A6FA5` | **INTJ** | 建筑师 | 量化分析，看穿规律 | 📚 |
-| `#6B7DB3` | **INTP** | 逻辑学家 | 数据偏执，等十个信号才动手 | 📚 |
-| `#C4543E` | **ENTJ** | 指挥官 | 市场即战场，厌恶犹豫 | 📊 |
-| `#D4853A` | **ENTP** | 辩论家 | 逆向思维，专和共识对着干 | ☕ |
-| `#5B9E6F` | **INFJ** | 提倡者 | 读市场情绪如读人心 | 🌿 |
-| `#7DB37D` | **INFP** | 调停者 | 把K线当画看，凭美感交易 | 🌿 |
-| `#D4A843` | **ENFJ** | 主人公 | 社区领袖，一呼百应 | 🌳 |
-| `#E8B84B` | **ENFP** | 竞选者 | 每笔交易都是 next big thing | ☕ |
-| `#5A7A9A` | **ISTJ** | 物流师 | 退休会计师，三十年不败 | 📊 |
-| `#6B9E8A` | **ISFJ** | 守卫者 | 资本保全至上，恐慌得早但活得久 | 🏠 |
-| `#B84D3E` | **ESTJ** | 总经理 | 军人纪律，直觉让步于流程 | 📊 |
-| `#C46D5E` | **ESFJ** | 执政官 | FOMO驱动，别人买啥我买啥 | 🌳 |
-| `#4A7A9A` | **ISTP** | 鉴赏家 | 机械师，午休精准狙击 | ☕ |
-| `#5B9E7A` | **ISFP** | 探险家 | 音乐家，凭节奏交易 | 🌿 |
-| `#C46D3E` | **ESTP** | 企业家 | 前扑克选手，波动越大越兴奋 | ☕ |
-| `#D48D5E` | **ESFP** | 表演者 | 每笔交易都是一场表演 | 🌳 |
-
-### 🔭📐🔮 3 位观察者
-
-不参与交易，站在系统之外观察 Agent 与市场的耦合规律：
-
-| 🎨 | ID | 名称 | 地点 | 方法论 | 置信度 |
-|---|---|---|---|---|---|
-| `#7B9ECF` | **physicist** | 物理学家 | 🔭 天文台 | 统计物理、相变理论、序参量、关联长度 | 70–85% |
-| `#9E7BCF` | **mathematician** | 数学家 | 📐 数学塔 | 图论、组合优化、交互图连通分量、团检测 | 75–90% |
-| `#CF7BAE` | **mystic** | 玄学高手 | 🔮 占卜帐篷 | 易经、茶叶、水星逆行、宇宙能量场 | 5–45% ⭐ |
-
-每 ~20 tick 各发一份分析报告，语言风格各具特色。
+| 端点 | 用途 |
+|---|---|
+| `GET /api/bootstrap` | 角色、城镇、对齐历史、数据源、最近报告/成交 |
+| `GET /api/status` | tick、速度、K 线进度、数据源、缓存警告、守恒失败次数 |
+| `GET /api/market` | 只读当前 K 线（永不推进） |
+| `GET /api/market/history?limit=180` | 只读、截止到当前回放位置的对齐 K 线 |
+| `GET /api/health` | 只有真实且非过期数据才返回 `ok` |
+| `GET /api/town`、`GET /api/personas` | 静态定义（20 位角色、15 个地点） |
+| `POST /api/sim/start` / `stop` / `reset` | 控制 |
+| `WS /ws` | 行情帧、仿真状态、hello、倍速、重置、ping |
 
 ---
 
-## ⚖️ 对冲机制
+## 测试
 
+```bash
+python -m unittest discover -s tests -v
 ```
-Agent 买卖意图
-    │
-    ├─ ✅ 可撮合 ──→ Agent A 买 ←→ Agent B 卖（直接对敲）
-    │
-    └─ ❌ 无法撮合 ──→ 🏛️ House 做市商吸收
-                         │
-                         ├─ 净买入 → House 卖出（做空）
-                         ├─ 净卖出 → House 买入（做多）
-                         │
-                         └─ 净效果：小镇股价 ≡ 真实股价
-```
+
+**21 个测试**，覆盖：
+
+- K 线清洗、OHLC 修复与时区处理
+- 多标的时间戳交集对齐与缓存往返
+- 合成数据的横截面相关性
+- 指标方向与边界
+- 限价约束、部分成交、手续费与加权成本
+- 已实现盈亏、胜率、平仓事件与资金守恒
+- 策略先验、奖励更新、变异/学习状态与公会报告
+
+此外还使用一个小型合成数据提供者验证了：回放循环会同时重置组合、策略世代、观察者
+和 House 手续费池。
 
 ---
 
-## 🔧 配置
-
-编辑 `backend/config.py`：
-
-```python
-# 📡 历史数据回放
-HIST_DAYS_BACK = 5        # 加载几天的数据
-HIST_INTERVAL = "5m"      # K线级别: 1m / 5m / 15m / 30m / 1h
-HIST_LOOP = True          # 播完是否循环
-
-# ⏱️ 模拟速度
-TICK_INTERVAL_SEC = 1.5   # 每 tick 秒数
-
-# 📈 股票标的
-SYMBOLS = ["AAPL", "GOOGL", "MSFT", "TSLA", "AMZN"]
-
-# 💵 Agent 参数
-INITIAL_CASH = 10_000.0   # 初始资金
-BUY_THRESHOLD = 0.08      # 买入信号阈值
-SELL_THRESHOLD = -0.05    # 卖出信号阈值
-```
-
----
-
-## 🧱 项目结构
+## 目录结构
 
 ```
 agent-street/
 ├── backend/
-│   ├── main.py              # FastAPI 入口 | REST + WebSocket
-│   ├── config.py            # 所有可调参数
-│   ├── ws_manager.py        # WebSocket 广播
-│   ├── models/
-│   │   ├── portfolio.py     # 持仓 | 交易意图 | Agent 状态
-│   │   ├── market.py        # 仿真帧 | 快照
-│   │   └── town.py          # 20×14 小镇地图 | 12 个地点 | BFS 寻路
+│   ├── main.py                  # FastAPI：bootstrap / status / market / WebSocket
+│   ├── config.py                # 环境变量配置
+│   ├── ws_manager.py            # 帧序列化 + 带超时广播
 │   ├── engine/
-│   │   ├── simulation.py    # 🎯 主循环
-│   │   ├── market_data.py   # 📡 yfinance 历史K线回放
-│   │   ├── persona_engine.py# 🧠 MBTI → 交易决策
-│   │   ├── matching_engine.py# ⚖️ 对冲撮合
-│   │   ├── memory_system.py # 🗄️ 三层记忆
-│   │   ├── daily_routine.py # 🚶 日程+移动
-│   │   ├── conversation.py  # 💬 Agent 对话
-│   │   ├── observer_engine.py# 🔭📐🔮 观察者引擎
-│   │   └── llm_client.py    # 🤖 LLM 客户端（可选）
-│   └── mbti/
-│       ├── types.py         # 人格维度 | 参数推导
-│       └── personas.py      # 16 个 Agent 定义
+│   │   ├── simulation.py        # tick 循环、赛季、快照、账本
+│   │   ├── market_data.py       # 抓取、校验、对齐、缓存、合成
+│   │   ├── indicators.py        # 共享动量/RSI/ATR/波动率引擎
+│   │   ├── strategy.py          # 基因组、奖励学习、模仿、公会
+│   │   ├── persona_engine.py    # 基因组加权、带风控的决策
+│   │   ├── matching_engine.py   # 交叉、House、手续费、平仓事件
+│   │   ├── memory_system.py     # 有依据的观察 → 反思
+│   │   ├── conversation.py      # 冷却、辩论、可选 LLM
+│   │   ├── observer_engine.py   # 物理学家 / 数学家 / 社会工程学家 / 神秘主义者
+│   │   ├── daily_routine.py     # 日程 + BFS 寻路
+│   │   ├── influence_network.py # 信任图 + 环境修正
+│   │   ├── ifind_connector.py   # 可选 iFinD
+│   │   └── llm_client.py        # 异步 OpenAI 兼容客户端
+│   ├── models/                  # 持仓、行情帧、小镇地图
+│   └── mbti/                    # 人格定义与策略先验
 ├── frontend/
-│   ├── index.html           # 单页应用
-│   ├── css/style.css        # 像素风主题
-│   └── js/
-│       ├── app.js
-│       ├── ws_client.js
-│       ├── rendering/
-│       │   └── pixel_art.js # 8×8 像素精灵
-│       └── canvas/
-│           ├── town_map.js       # 🗺️ 小镇地图
-│           ├── stock_chart.js    # 📈 走势图
-│           ├── leaderboard.js    # 🏆 排行榜
-│           ├── trade_feed.js     # 📝 交易流水
-│           ├── agent_detail.js   # 👤 Agent 面板
-│           └── observer_reports.js# 🔭📐🔮 观察报告
+│   ├── index.html
+│   ├── css/style.css
+│   ├── js/
+│   │   ├── main.js              # 启动、WebSocket、控制
+│   │   ├── town3d.js            # 3D 小镇 + 角色 + 昼夜
+│   │   ├── market_chart.js      # K 线 / 对比 / Guilds / tooltip
+│   │   ├── leaderboard.js       # DOM 排行榜 + 公会代码
+│   │   ├── agent_detail.js      # Account / Strategy 标签
+│   │   ├── observer_reports.js  # 四张观察者卡片
+│   │   ├── trade_feed.js
+│   │   ├── ws_client.js
+│   │   └── utils.js
+│   └── vendor/three/            # 固定版本 Three.js r160 + OrbitControls
+├── tests/
+│   ├── test_market_data.py
+│   ├── test_indicators.py
+│   ├── test_matching.py
+│   └── test_strategy.py
+├── docs/
+│   ├── screenshot.png
+│   ├── screenshot-guilds.png
+│   ├── screenshot-strategy.png
+│   └── screenshot.gif
 ├── requirements.txt
-├── run.py
-├── README.md
-└── README_CN.md
+└── run.py                       # http://localhost:8766
 ```
 
 ---
 
-## 🙏 致谢
+## 设计说明与边界
 
-- 🏘️ [**Generative Agents** (Park et al., 2023)](https://github.com/joonspk-research/generative_agents) — 斯坦福 Smallville
-- 🧠 MBTI 人格理论
-- 🎮 像素艺术传统
+- **House 吸收剩余流。** 这是刻意设计：小镇价格跟踪真实回放价，角色不能靠推动市场
+  凭空制造 alpha。盈亏来自时机、仓位与执行，来自彼此之间和与 House 的博弈。
+- **一次回放循环 = 一个新赛季。** 组合、记忆、策略世代、House 手续费池和观察者同步
+  重置。这避免了循环边界的市值跳变，也让资金守恒保持有意义。
+- **学习器是轻量的。** 在线奖励调制 + 模仿 + 变异，目标是可见、可检查的行为变化，
+  不是生产级 alpha 模型。
+- **不接实盘。** 这是仿真，不连接券商，不产生真实订单，也不构成投资建议。
+- **可选依赖。** yfinance 是默认数据源；iFinD 与 Alpha Vantage 需显式选择。合成数据
+  永远带标注。
+- **LLM 可选。** 规则版反思与对话始终可用；LLM 增强在后台任务中运行，带并发限制与
+  超时，不阻塞 tick。
+
+---
+
+## 致谢
+
+- 🏘️ [Generative Agents (Park et al., 2023)](https://github.com/joonspk-research/generative_agents) — 记忆流、反思、Smallville
+- 🧠 MBTI 人格理论 — 作为可进化的行为先验，而不是判决
+- 🎮 [Three.js](https://threejs.org/) — 立体小镇渲染
+- 📡 [yfinance](https://github.com/ranaroussi/yfinance) — 公共行情数据
+- 📊 深色图表配色遵循经过校验的分类/发散色板，公会身份从不只依赖颜色
 
 ---
 
 <div align="center">
-  <sub>MIT License · <a href="https://github.com/huiihao/agent-street">github.com/huiihao/agent-street</a></sub>
+  <sub>Made with ❤️ · MIT License · <a href="https://github.com/huiihao/agent-street">github.com/huiihao/agent-street</a></sub>
 </div>

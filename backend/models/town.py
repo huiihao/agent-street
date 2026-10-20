@@ -18,20 +18,20 @@ TILE_NAMES = {
 
 # 20x14 town map (0=grass, 1=road_h, 2=road_v, 3=building, 4=tree, 5=water, 6=sidewalk)
 TOWN_MAP: list[list[int]] = [
-    [4,4,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,4,4],
-    [4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4],
-    [0,0,3,3,3,0,0,0,3,3,3,0,0,0,3,3,3,0,0,0],
-    [0,0,3,3,3,0,0,0,3,3,3,0,0,0,3,3,3,0,0,0],
-    [6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6],
-    [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-    [0,0,3,3,0,0,0,0,3,3,3,0,0,0,0,3,3,0,0,0],
-    [0,0,3,3,0,0,0,0,3,3,3,0,0,0,0,3,3,0,0,0],
-    [6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6],
-    [0,0,0,4,0,0,0,0,0,5,5,0,0,0,0,4,0,0,0,0],
-    [0,0,0,4,0,0,0,0,0,5,5,0,0,0,0,4,0,0,0,0],
-    [6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6],
-    [0,0,0,0,0,0,0,0,3,3,3,0,0,0,0,0,0,0,0,0],
-    [0,4,4,0,0,4,0,0,3,3,3,0,0,4,0,0,4,4,0,0],
+    [4,4,4,0,0,0,2,0,0,0,0,0,2,0,0,0,0,4,4,4],
+    [4,0,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,0,4],
+    [0,0,3,3,3,0,2,0,3,3,3,0,2,0,3,3,3,0,0,0],
+    [0,0,3,3,3,0,2,0,3,3,3,0,2,0,3,3,3,0,0,0],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [0,0,0,0,0,0,2,0,0,0,0,0,2,0,0,0,0,0,0,0],
+    [0,0,3,3,0,0,2,0,3,3,3,0,2,0,0,3,3,0,0,0],
+    [0,0,3,3,0,0,2,0,3,3,3,0,2,0,0,3,3,0,0,0],
+    [6,6,6,6,6,6,2,6,6,6,6,6,2,6,6,6,6,6,6,6],
+    [0,0,0,4,0,0,2,0,0,5,5,0,2,0,0,4,0,0,0,0],
+    [0,0,0,4,0,0,2,0,0,5,5,0,2,0,0,4,0,0,0,0],
+    [6,6,6,6,6,6,2,6,6,6,6,6,2,6,6,6,6,6,6,6],
+    [0,0,0,0,0,0,2,0,3,3,3,0,2,0,0,0,0,0,0,0],
+    [0,4,4,0,0,4,2,0,3,3,3,0,2,4,0,0,4,4,0,0],
 ]
 
 
@@ -61,15 +61,18 @@ class Location:
 
 
 LOCATIONS: dict[str, Location] = {
-    "home_ne": Location("home_ne", "Blue Roof House", 2, 2, 3, 2, "#6B8EB5", "🏠"),
+    "home_ne": Location("home_ne", "Blue Roof House", 3, 2, 3, 2, "#6B8EB5", "🏠"),
     "home_nw": Location("home_nw", "Red Roof House", 9, 2, 3, 2, "#C47A6B", "🏠"),
-    "home_se": Location("home_se", "Green Roof House", 14, 2, 3, 2, "#6BB57A", "🏠"),
+    "home_se": Location("home_se", "Green Roof House", 15, 2, 3, 2, "#6BB57A", "🏠"),
     "home_sw": Location("home_sw", "Yellow Roof House", 2, 6, 3, 2, "#D4B86B", "🏠"),
     "cafe": Location("cafe", "Morning Brew Cafe", 9, 6, 3, 2, "#C4906B", "☕"),
     "market": Location("market", "Trading Floor", 2, 9, 1, 2, "#8B8BA0", "📊"),
     "library": Location("library", "Data Library", 15, 6, 3, 2, "#8BA0B5", "📚"),
     "square": Location("square", "Town Square", 9, 12, 3, 3, "#A0A090", "🌳"),
-    "park": Location("park", "Willow Park", 9, 9, 2, 2, "#6BA06B", "🌿"),
+    "park": Location("park", "Willow Park", 11, 9, 2, 2, "#6BA06B", "🌿"),
+    "rumor": Location("rumor", "Rumor Mill", 5, 5, 1, 1, "#B58A5A", "📰"),
+    "lab": Location("lab", "Quant Lab", 13, 10, 2, 2, "#5A7A9A", "🧪"),
+    "hall": Location("hall", "Guild Hall", 5, 10, 2, 2, "#8A7A5A", "🏛️"),
     # Observer locations
     "observatory": Location("observatory", "Observatory", 17, 10, 2, 2, "#3A3A5A", "🔭"),
     "math_tower":  Location("math_tower", "Math Tower", 18, 2, 2, 2, "#4A4A6A", "📐"),
@@ -79,6 +82,7 @@ LOCATIONS: dict[str, Location] = {
 OBSERVER_HOMES: dict[str, str] = {
     "physicist": "observatory",
     "mathematician": "math_tower",
+    "social_engineer": "hall",
     "mystic": "fortune_tent",
 }
 
@@ -107,13 +111,15 @@ def bfs_path(start: tuple[int, int], end: tuple[int, int], max_steps: int = 40) 
         for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, 1), (1, -1), (-1, -1)]:
             nx, ny = x + dx, y + dy
             if 0 <= nx < cols and 0 <= ny < rows and (nx, ny) not in visited:
+                new_path = path + [(nx, ny)]
+                # A building is a valid *destination* (agents walk inside),
+                # but it must not be used as a pass-through tile.
+                if (nx, ny) == end:
+                    return new_path
                 tile = TOWN_MAP[ny][nx]
                 if tile in (WATER, BUILDING):
                     visited.add((nx, ny))
                     continue
-                new_path = path + [(nx, ny)]
-                if (nx, ny) == end:
-                    return new_path
                 visited.add((nx, ny))
                 queue.append(new_path)
 

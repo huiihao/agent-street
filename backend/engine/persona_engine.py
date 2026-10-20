@@ -1,189 +1,340 @@
+"""Personality-driven trading decisions.
+
+Signals are dimensionless and computed once per tick by ``IndicatorEngine``:
+  * trend:      5-bar momentum divided by its own realised volatility
+  * reversion:  distance from the 20-bar mean in ATR units
+  * rsi:        overbought/oversold pressure
+  * social:     herding + trust-network influence + memory sentiment
+
+The composite is blended with the agent's MBTI parameters, then passed through
+risk controls: drawdown panic, stop loss, profit taking, holding period,
+position cap and per-symbol cooldowns. Randomness is bounded and scaled by the
+agent's volatility tolerance, so results are noisy without being arbitrary.
+"""
+
+from __future__ import annotations
+
 import random
-from backend.models.portfolio import PersonaState, Holding, TradeIntent
-from backend.mbti.types import TradingParams
+
+from backend.config import (
+    BUY_THRESHOLD,
+    MAX_POSITION_PCT,
+    PANIC_COOLDOWN_TICKS,
+    SELL_THRESHOLD,
+)
+from backend.engine.indicators import MarketMetrics, SymbolMetrics
+from backend.engine.market_data import MarketSnapshot
+from backend.engine.strategy import StrategyGenome
 from backend.engine.memory_system import AgentMemory
-from backend.config import BUY_THRESHOLD, SELL_THRESHOLD, SYMBOLS
+from backend.mbti.types import TradingParams
+from backend.models.portfolio import PersonaState, TradeIntent
+
+EPS = 1e-9
+
+
+def _clip(value: float, lo: float = -1.0, hi: float = 1.0) -> float:
+    return max(lo, min(hi, value))
+
+
+def _tanh(value: float) -> float:
+    try:
+        return __import__("math").tanh(value)
+    except (OverflowError, ValueError):
+        return 0.0
 
 
 class PersonaDecisionEngine:
     def __init__(self):
-        self._signal_memory: dict[str, dict[str, list[float]]] = {}
         self.memories: dict[str, AgentMemory] = {}
-        self.influence: "InfluenceNetwork | None" = None  # set by simulation
+        self.strategies: dict[str, StrategyGenome] = {}
+        self.influence = None  # InfluenceNetwork, injected by the simulation
 
-    def register_memory(self, agent_id: str, memory: AgentMemory):
+    def register_memory(self, agent_id: str, memory: AgentMemory) -> None:
         self.memories[agent_id] = memory
+
+    def register_strategy(self, agent_id: str, genome: StrategyGenome) -> None:
+        self.strategies[agent_id] = genome
+
+    # ── main entry point ─────────────────────────────────────
 
     def decide(
         self,
         persona: PersonaState,
-        params: TradingParams,          # environment-modified params
-        base_params: TradingParams | None,  # original params for reference
-        prices: dict[str, float],
-        changes: dict[str, float],
+        params: TradingParams,
+        base_params: TradingParams | None,
+        snapshot: MarketSnapshot,
+        metrics: MarketMetrics,
         all_states: dict[str, PersonaState],
         tick: int,
     ) -> list[TradeIntent]:
-        if tick - persona.last_decision_tick < max(1, int(10 * (1 - params.reaction_speed))):
+        action_cooldown = max(1, int(round(1 + 6 * (1.0 - params.reaction_speed))))
+        if tick - persona.last_decision_tick < action_cooldown:
+            return []
+        persona.last_decision_tick = tick
+
+        prices = {s: b.close for s, b in snapshot.bars.items()}
+        equity = persona.equity(prices)
+        if equity <= 0:
             return []
 
-        persona.last_decision_tick = tick
-        intents: list[TradeIntent] = []
+        # Track peak equity for drawdown-based panic.
+        persona.peak_equity = max(persona.peak_equity, equity)
+        drawdown = equity / persona.peak_equity - 1.0 if persona.peak_equity > 0 else 0.0
 
         memory = self.memories.get(persona.persona_id)
         memory_sentiment = memory.get_sentiment() if memory else 0.0
-
-        # Compute aggregate herding signal
-        herding_signal = self._compute_herding(all_states, persona.persona_id)
-
-        # Trust-weighted influence from agent coupling network
+        herding = self._compute_herding(all_states, persona.persona_id, tick)
         influence_signal = 0.0
-        if self.influence:
+        if self.influence is not None:
             influence_signal = self.influence.influence_signal(
                 persona.persona_id, self.memories, prices,
             )
 
-        # Panic check — also considers memory sentiment
-        portfolio_val = persona.portfolio_value(prices)
-        pnl_pct = (portfolio_val - 10000) / 10000
-        effective_panic = params.panic_threshold * (1 + 0.3 * memory_sentiment)  # Positive sentiment dulls panic (makes threshold more negative)
-        if pnl_pct < effective_panic:
-            for h in persona.holdings.values():
-                if h.shares > 0:
-                    intents.append(TradeIntent(
-                        persona_id=persona.persona_id,
-                        symbol=h.symbol,
-                        direction="SELL",
-                        shares=h.shares,
-                        limit_price=prices.get(h.symbol, 0) * 0.95,
-                        reason="panic_sell",
-                        timestamp=tick,
-                    ))
-                    if memory:
-                        memory.observe(
-                            f"Panic sold {h.symbol} after {pnl_pct:.1%} drawdown",
-                            "reflection", 0.9, tick,
-                        )
+        # ── panic exit ───────────────────────────────────────
+        effective_panic = params.panic_threshold * (1.0 + 0.25 * memory_sentiment)
+        if (
+            drawdown < effective_panic
+            and tick - persona.last_panic_tick >= PANIC_COOLDOWN_TICKS
+            and any(h.shares > 0 for h in persona.holdings.values())
+        ):
+            intents: list[TradeIntent] = []
+            for holding in list(persona.holdings.values()):
+                if holding.shares <= 0:
+                    continue
+                price = prices.get(holding.symbol, holding.avg_cost)
+                intents.append(TradeIntent(
+                    persona_id=persona.persona_id,
+                    symbol=holding.symbol,
+                    direction="SELL",
+                    shares=holding.shares,
+                    limit_price=price * 0.97,
+                    reason="panic_sell",
+                    timestamp=tick,
+                ))
+            persona.last_panic_tick = tick
+            if memory:
+                memory.observe(
+                    f"Panic sold everything after a {drawdown:.1%} drawdown",
+                    "reflection", 0.95, tick, sentiment=_clip(drawdown * 8),
+                )
             return intents
 
-        # Process each symbol
-        for symbol in SYMBOLS:
-            price = prices.get(symbol, 0)
-            change = changes.get(symbol, 0)
-            if price <= 0:
+        intents: list[TradeIntent] = []
+        for symbol, bar in snapshot.bars.items():
+            m = metrics.symbols.get(symbol)
+            if m is None or bar.close <= 0:
                 continue
+            price = bar.close
+            change = snapshot.changes.get(symbol, 0.0)
+            holding = persona.holdings.get(symbol)
+            held_shares = holding.shares if holding else 0
 
-            momentum = self._compute_momentum(symbol, price)
-            volatility = self._compute_volatility(symbol, price)
-
-            # Weighted composite score — now includes memory sentiment
-            contrarian_adj = momentum * (1 - params.contrarianism) - momentum * params.contrarianism
-            tech_signal = contrarian_adj * 0.6 + (1 - volatility / max(price * 0.1, 0.01)) * 0.4
-            social_signal = (herding_signal * 0.4 + influence_signal * 0.4 + memory_sentiment * 0.2) * params.herding_weight
-            composite = params.tech_weight * tech_signal + (1 - params.tech_weight) * social_signal
-
-            # Price change observation
-            if memory and abs(change) > 0.005:
-                direction = "up" if change > 0 else "down"
+            # ── grounded memory observations (rate limited) ──
+            if memory and abs(change) > 0.006:
                 memory.observe(
-                    f"{symbol} went {direction} {abs(change):.1%} to ${price:.2f}",
-                    "price", min(abs(change) * 20, 1.0), tick,
+                    f"{symbol} {'up' if change > 0 else 'down'} {abs(change):.2%} "
+                    f"to ${price:.2f} (RSI {m.rsi_14:.0f}, trend {m.trend_score:+.2f})",
+                    "price",
+                    min(1.0, 0.3 + abs(change) * 25),
+                    tick,
+                    sentiment=_clip(change / 0.01),
                 )
 
-            # Add randomness scaled by volatility tolerance
-            noise = random.uniform(-0.15, 0.15) * (1 - params.volatility_tolerance)
-            composite += noise
+            # ── signal blend ─────────────────────────────────
+            genome = self.strategies.get(persona.persona_id)
+            contrarian = genome.contrarian if genome else params.contrarianism
+            trend_adj = (1.0 - 2.0 * contrarian) * m.trend_score
+            reversion_adj = (0.5 + contrarian) * m.reversion_score
 
-            # Greed check for existing holdings
-            holding = persona.holdings.get(symbol)
-            if holding and holding.shares > 0:
-                gain_pct = (price - holding.avg_cost) / holding.avg_cost
-                if gain_pct > params.greed_threshold:
-                    sell_shares = max(1, int(holding.shares * 0.5))
+            if genome:
+                # The evolved genome replaces the fixed blend. Weights sum to
+                # one across all six signal families, so the composite stays in
+                # [-1, 1] before bounded exploration noise.
+                tech = (
+                    genome.trend * trend_adj
+                    + genome.reversion * reversion_adj
+                    + genome.rsi * m.rsi_score
+                )
+                social = (
+                    genome.herding * herding
+                    + genome.influence * influence_signal
+                    + genome.memory * memory_sentiment
+                )
+                composite = _clip(tech + social)
+                noise_scale = 0.03 + 0.10 * genome.noise
+            else:
+                tech = _clip(0.50 * trend_adj + 0.30 * reversion_adj + 0.20 * m.rsi_score)
+                social = _clip(
+                    0.45 * herding
+                    + 0.35 * influence_signal
+                    + 0.20 * memory_sentiment
+                )
+                composite = params.tech_weight * tech + (1.0 - params.tech_weight) * social
+                noise_scale = 0.04 + 0.10 * (1.0 - params.volatility_tolerance)
+
+            composite = _clip(composite + random.gauss(0.0, noise_scale))
+            persona.signals[symbol] = round(composite, 4)
+            signal_context = {
+                "trend": round(trend_adj, 4),
+                "reversion": round(reversion_adj, 4),
+                "rsi": round(m.rsi_score, 4),
+                "herding": round(herding, 4),
+                "influence": round(influence_signal, 4),
+                "memory": round(memory_sentiment, 4),
+                "composite": round(composite, 4),
+            }
+
+            # ── cooldown after a recent action in this symbol ──
+            if tick < persona.symbol_cooldowns.get(symbol, -1):
+                continue
+
+            # ── risk exits ───────────────────────────────────
+            if holding and held_shares > 0:
+                gain = (price - holding.avg_cost) / max(holding.avg_cost, EPS)
+                held_ticks = tick - holding.opened_tick
+                risk_appetite = genome.risk if genome else params.risk_tolerance
+                stop_loss = 0.02 + 0.06 * (1.0 - risk_appetite)
+
+                if gain < -stop_loss and held_ticks >= 1:
+                    intents.append(self._sell(persona, symbol, held_shares, price, "stop_loss", tick))
+                    persona.symbol_cooldowns[symbol] = tick + 3
+                    if memory:
+                        memory.observe(
+                            f"Stopped out of {symbol} at {gain:.1%}",
+                            "reflection", 0.8, tick, sentiment=-0.6,
+                        )
+                    break
+
+                if gain > params.greed_threshold and held_ticks >= 1 and (
+                    composite < 0.20 or m.rsi_14 > 70
+                ):
+                    qty = max(1, held_shares // 2)
+                    if held_shares - qty == 1:
+                        qty = held_shares
+                    intents.append(self._sell(persona, symbol, qty, price, "profit_take", tick))
+                    persona.symbol_cooldowns[symbol] = tick + 2
+                    if memory:
+                        memory.observe(
+                            f"Took profit on {symbol} at {gain:.1%}",
+                            "reflection", 0.7, tick, sentiment=0.5,
+                        )
+                    break
+
+                # Require conviction to exit inside the minimum holding period.
+                hold_base = params.holding_period_ticks * (
+                    (0.6 + 0.8 * genome.patience) if genome else 1.0
+                )
+                min_hold = max(1, int(hold_base * 0.5))
+                if held_ticks < min_hold and composite > SELL_THRESHOLD * 1.8:
+                    continue
+
+            # ── entries / exits ──────────────────────────────
+            if composite > BUY_THRESHOLD:
+                conviction = (composite - BUY_THRESHOLD) / max(1.0 - BUY_THRESHOLD, EPS)
+                budget = self._position_budget(
+                    persona, params, price, equity, conviction, held_shares, genome,
+                )
+                shares = int(budget / price) if price > 0 else 0
+                if shares >= 1 and persona.cash >= shares * price:
                     intents.append(TradeIntent(
                         persona_id=persona.persona_id,
                         symbol=symbol,
-                        direction="SELL",
-                        shares=sell_shares,
-                        limit_price=price * 0.98,
-                        reason="profit_take",
+                        direction="BUY",
+                        shares=shares,
+                        limit_price=price * 1.005,
+                        reason="trend_follow" if m.trend_score > 0.1 else "contrarian_buy",
                         timestamp=tick,
+                        context=signal_context,
                     ))
+                    persona.symbol_cooldowns[symbol] = tick + 2 + int(4 * (1.0 - params.reaction_speed))
                     if memory:
                         memory.observe(
-                            f"Took profit on {symbol} at {gain_pct:.1%} gain",
-                            "reflection", 0.7, tick,
+                            f"Bought {shares} {symbol} at ${price:.2f} "
+                            f"(signal {composite:+.2f}, RSI {m.rsi_14:.0f})",
+                            "reflection", 0.55 + 0.3 * conviction, tick,
+                            sentiment=_clip(composite),
                         )
-                    continue
+                    # One deliberate action per decision cycle keeps the tape
+                    # readable and prevents firing five orders in one tick.
+                    break
 
-            # Buy / Sell decision
-            trade_cash = persona.cash * params.trade_size_pct
-            shares = max(1, int(trade_cash / price))
-
-            if composite > BUY_THRESHOLD and persona.cash >= shares * price:
-                reason = "trend_follow" if momentum > 0 else "contrarian_buy"
-                intents.append(TradeIntent(
-                    persona_id=persona.persona_id,
-                    symbol=symbol,
-                    direction="BUY",
-                    shares=shares,
-                    limit_price=price * 1.02,
-                    reason=reason,
-                    timestamp=tick,
-                ))
+            elif composite < SELL_THRESHOLD and held_shares > 0:
+                conviction = (SELL_THRESHOLD - composite) / max(1.0 + SELL_THRESHOLD, EPS)
+                qty = max(1, int(held_shares * (0.30 + 0.70 * conviction)))
+                qty = min(qty, held_shares)
+                if held_shares - qty == 1:
+                    qty = held_shares
+                intents.append(self._sell(persona, symbol, qty, price, "contrarian_sell", tick))
+                persona.symbol_cooldowns[symbol] = tick + 2 + int(3 * (1.0 - params.reaction_speed))
                 if memory:
                     memory.observe(
-                        f"Bought {shares} {symbol} — {reason}",
-                        "reflection", 0.6, tick,
+                        f"Sold {qty} {symbol} at ${price:.2f} (signal {composite:+.2f})",
+                        "reflection", 0.55, tick, sentiment=_clip(composite),
                     )
-            elif composite < SELL_THRESHOLD and holding and holding.shares > 0:
-                sell_shares = max(1, int(holding.shares * abs(composite)))
-                intents.append(TradeIntent(
-                    persona_id=persona.persona_id,
-                    symbol=symbol,
-                    direction="SELL",
-                    shares=min(sell_shares, holding.shares),
-                    limit_price=price * 0.98,
-                    reason="contrarian",
-                    timestamp=tick,
-                ))
-                if memory:
-                    memory.observe(
-                        f"Sold {min(sell_shares, holding.shares)} {symbol} — contrarian signal",
-                        "reflection", 0.6, tick,
-                    )
+                break
 
         return intents
 
-    def _compute_herding(self, all_states: dict[str, PersonaState], exclude_id: str) -> float:
-        buy_count = 0
-        sell_count = 0
-        for pid, ps in all_states.items():
-            if pid == exclude_id or not ps.trade_history:
+    # ── helpers ──────────────────────────────────────────────
+
+    def _position_budget(
+        self,
+        persona: PersonaState,
+        params: TradingParams,
+        price: float,
+        equity: float,
+        conviction: float,
+        held_shares: int,
+        genome: StrategyGenome | None = None,
+    ) -> float:
+        risk = genome.risk if genome else params.risk_tolerance
+        max_position_pct = MAX_POSITION_PCT * (0.55 + 0.9 * risk)
+        max_position_value = equity * max_position_pct
+        current_value = held_shares * price
+        room = max(0.0, max_position_value - current_value)
+        target = persona.cash * params.trade_size_pct * (0.55 + 0.75 * conviction)
+        return max(0.0, min(persona.cash, room, target))
+
+    @staticmethod
+    def _sell(
+        persona: PersonaState,
+        symbol: str,
+        shares: int,
+        price: float,
+        reason: str,
+        tick: int,
+    ) -> TradeIntent:
+        return TradeIntent(
+            persona_id=persona.persona_id,
+            symbol=symbol,
+            direction="SELL",
+            shares=max(1, shares),
+            limit_price=price * 0.995,
+            reason=reason,
+            timestamp=tick,
+        )
+
+    def _compute_herding(
+        self,
+        all_states: dict[str, PersonaState],
+        exclude_id: str,
+        tick: int,
+    ) -> float:
+        buy_weight = 0.0
+        sell_weight = 0.0
+        for pid, state in all_states.items():
+            if pid == exclude_id or not state.trade_history:
                 continue
-            last_dir = ps.trade_history[-1].direction
-            if last_dir == "BUY":
-                buy_count += 1
+            last = state.trade_history[-1]
+            age = tick - last.timestamp
+            if age > 20:
+                continue
+            weight = 1.0 - age / 20.0
+            if last.direction == "BUY":
+                buy_weight += weight
             else:
-                sell_count += 1
-        total = buy_count + sell_count
-        if total == 0:
+                sell_weight += weight
+        total = buy_weight + sell_weight
+        if total <= 0:
             return 0.0
-        return (buy_count - sell_count) / total
-
-    def _compute_momentum(self, symbol: str, current_price: float) -> float:
-        mem = self._signal_memory.setdefault(symbol, [])
-        mem.append(current_price)
-        if len(mem) > 10:
-            mem.pop(0)
-        if len(mem) < 3:
-            return 0.0
-        return (mem[-1] - mem[0]) / max(mem[0], 0.01)
-
-    def _compute_volatility(self, symbol: str, current_price: float) -> float:
-        mem = self._signal_memory.setdefault(symbol, [])
-        if len(mem) < 5:
-            return 0.01 * current_price
-        mean = sum(mem) / len(mem)
-        variance = sum((p - mean) ** 2 for p in mem) / len(mem)
-        return variance ** 0.5
+        return (buy_weight - sell_weight) / total

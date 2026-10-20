@@ -51,6 +51,22 @@ LOCATION_MODIFIERS: dict[str, dict] = {
         "panic_threshold": +0.02,  # more tolerant (less negative)
         "desc": "solitude breeds independent thought",
     },
+    "rumor": {
+        "herding_weight": +0.25,
+        "contrarianism": -0.05,
+        "reaction_speed": +0.05,
+        "desc": "rumours travel faster than prices",
+    },
+    "lab": {
+        "tech_weight": +0.20,
+        "holding_period_ticks": +3,
+        "desc": "quiet research and strategy evolution",
+    },
+    "hall": {
+        "herding_weight": +0.12,
+        "risk_tolerance": +0.03,
+        "desc": "public debate and coalition building",
+    },
     "home_ne": {
         "panic_threshold": +0.03,
         "risk_tolerance": -0.05,
@@ -107,6 +123,11 @@ class InfluenceNetwork:
 
     def __init__(self):
         self.edges: dict[str, dict[str, TrustEdge]] = {}  # a_id -> {b_id: edge}
+        self._init_trust()
+
+    def reset(self) -> None:
+        """Clear learned trust back to the MBTI/housemate baseline."""
+        self.edges = {}
         self._init_trust()
 
     def _init_trust(self):
@@ -182,6 +203,19 @@ class InfluenceNetwork:
             if len(result) >= 5:
                 break
         return result
+
+    def top_edges(self, limit: int = 40) -> list[dict]:
+        """Strongest trust links, for observers and optional visualisations."""
+        edges = []
+        for a, targets in self.edges.items():
+            for b, edge in targets.items():
+                if edge.weight >= 0.25:
+                    edges.append({
+                        "a": a, "b": b, "weight": round(edge.weight, 3),
+                        "conversations": edge.conversations,
+                    })
+        edges.sort(key=lambda e: e["weight"], reverse=True)
+        return edges[:limit]
 
     def influence_signal(self, agent_id: str, memories: dict, prices: dict) -> float:
         """Weighted sentiment of trusted agents: -1 to +1."""

@@ -2,143 +2,420 @@
 
 <img src="https://img.shields.io/badge/python-3.10+-blue?style=flat-square&logo=python" alt="Python">
 <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
-<img src="https://img.shields.io/badge/status-active-brightgreen?style=flat-square" alt="Status">
-<img src="https://img.shields.io/badge/agents-19-ff69b4?style=flat-square" alt="Agents">
-<img src="https://img.shields.io/badge/LLM-optional-orange?style=flat-square" alt="LLM">
+<img src="https://img.shields.io/badge/agents-20-ff69b4?style=flat-square" alt="Agents">
+<img src="https://img.shields.io/badge/renderer-Three.js%20r160-5ad1ff?style=flat-square" alt="Three.js">
+<img src="https://img.shields.io/badge/tests-21-success?style=flat-square" alt="Tests">
 
 </div>
 
-<h1 align="center">
-  🏘️ Agent Street
-</h1>
+<h1 align="center">AGENT STREET</h1>
 
 <p align="center">
-  <i>A pixel-art simulation town where AI traders live, chat, and fight the market.</i>
+  <i>A 3D market diorama where sixteen MBTI traders learn from their P&amp;L,<br>
+  form strategy guilds, and rewrite their own playbooks — while four observers watch.</i>
+</p>
+
+<p align="center">
+  <sub><a href="README_CN.md">📖 中文文档</a> · <a href="#quick-start">Quick start</a> · <a href="#architecture">Architecture</a> · <a href="#strategy-evolution">Strategy evolution</a></sub>
+</p>
+
+---
+
+> **The premise:** a strategy should not be a constant in a config file. It should be
+> something an agent earns, borrows, mutates, and sometimes loses. Agent Street turns a
+> real market replay into a small society where that happens in public — on a map you
+> can orbit, in charts you can inspect, and in a ledger that must balance.
+
+![Agent Street](docs/screenshot.png)
+
+<p align="center"><sub>The town at dusk. The selected trader is in the <b>Strategy</b> tab, showing a genome that
+has drifted to 33% mean reversion after sixteen generations of live trading.</sub></p>
+
+---
+
+## Table of contents
+
+1. [What you are looking at](#what-you-are-looking-at)
+2. [Three things this project takes seriously](#three-things-this-project-takes-seriously)
+3. [Architecture](#architecture)
+4. [The town](#the-town)
+5. [The traders and observers](#the-traders-and-observers)
+6. [Strategy evolution](#strategy-evolution)
+7. [The market](#the-market)
+8. [Guilds: reading the emergent field](#guilds-reading-the-emergent-field)
+9. [Interface](#interface)
+10. [Quick start](#quick-start)
+11. [Configuration](#configuration)
+12. [Data pipeline](#data-pipeline)
+13. [API](#api)
+14. [Tests](#tests)
+15. [Project layout](#project-layout)
+16. [Design notes and limits](#design-notes-and-limits)
+17. [Acknowledgments](#acknowledgments)
+
+---
+
+## What you are looking at
+
+Each tick advances one validated historical bar. Sixteen traders see the same
+cross-section, form memories, talk to neighbours, and submit limit orders. An explicit
+House market maker absorbs whatever the town cannot cross, so the quoted price always
+equals the real replay price. Trades close, returns are attributed to the signals that
+produced them, and genomes drift. Conversations can transfer a better playbook. The
+town slowly clusters into guilds of momentum, mean reversion, sentiment and contrarian
+traders. Four observers — a physicist, a mathematician, a social engineer and a mystic —
+publish competing readings of the same system.
+
+The visual layer is not a mock-up: the Three.js town is generated from the same
+`TOWN_MAP` that drives pathfinding; the candles are the bars the agents actually see;
+the tape is the fills that actually moved cash.
+
+---
+
+## Three things this project takes seriously
+
+### 1. Data you can defend
+
+- **One timeline.** Every symbol is replayed on a single aligned timestamp index. The
+  old per-symbol modulo replay is gone, so cross-sectional relationships are real.
+- **Validation before simulation.** Non-finite and non-positive prices, duplicate
+  timestamps, contradictory OHLC values and obvious bad prints are removed. High/low
+  always contain open/close.
+- **Cache, not hope.** Aligned bars are written atomically to `.cache/bars_*.json`
+  (15 min TTL). Warm starts are ~50 ms and the app survives a Yahoo outage.
+- **Honest fallback.** `yfinance → Yahoo chart → iFinD (optional) → stale cache →
+  correlated synthetic`. The UI always says **LIVE / CACHED / SYNTHETIC**. Synthetic
+  bars are never dressed up as live data.
+- **Reads are pure.** `GET /api/market` and `/api/market/history` never advance the
+  replay. Only the simulation loop calls `advance()`.
+
+### 2. A ledger that balances
+
+- Limit checks, price/time priority, partial fills, agent-to-agent crosses, and House
+  absorption at `real price ± half-spread`.
+- Fees are charged per side and capitalised into average cost; sells realise P&L;
+  zero-share positions disappear.
+- The House balance sheet and a fee treasury are tracked.
+- Every 20 ticks the engine checks:
+
+  ```
+  Σ agent cash + Σ holdings·price + House cash + House holdings·price + fees = constant
+  ```
+
+- The invariant has held at zero failures across development runs. The test suite
+  covers fees, partial fills, average cost, realised P&L, win rate and conservation.
+
+### 3. Strategies that evolve
+
+- Each trader has a **genome**: six signal weights plus risk, patience, contrarian and
+  noise traits.
+- A closed trade is a learning event. The realised return is attributed back to the
+  signal components that were present at entry. Supportive weights grow after wins and
+  shrink after losses.
+- Conversations can **imitate** a higher-fitness playbook; trust gates the transfer and
+  the Quant Lab boosts the learning rate.
+- Small mutations keep the population from collapsing into one strategy.
+- Strategies are classified into guilds and visualised as a living field.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph DATA["Market data"]
+    Y["yfinance batch"] --> V["validate · align · cache"]
+    R["Yahoo chart API"] --> V
+    I["iFinD (optional)"] --> V
+    C["stale cache"] --> V
+    S["synthetic fallback"] --> V
+    V --> B["one aligned bar timeline"]
+  end
+
+  subgraph ENGINE["Simulation engine"]
+    IND["shared indicators"]
+    DEC["genome-weighted decisions"]
+    MAT["matching + House"]
+    STR["strategy evolution"]
+    IND --> DEC --> MAT --> STR
+    STR --> DEC
+  end
+
+  B --> IND
+  STR --> WS["FastAPI / WebSocket frame"]
+  WS --> UI["Three.js town · charts · panels"]
+  UI -- "start / stop / speed" --> WS
+```
+
+```mermaid
+sequenceDiagram
+  participant D as Data
+  participant S as Simulation
+  participant A as Agents
+  participant M as Matching / House
+  participant E as Strategy engine
+  participant U as Browser
+
+  D->>S: next aligned bar
+  S->>A: prices + shared indicators
+  A->>S: limit intents (genome-weighted)
+  S->>M: intents
+  M->>M: crosses, partial fills
+  M->>M: House absorbs residual
+  M-->>S: fills + close events
+  S->>E: realised returns + entry contexts
+  E->>A: reinforce / imitate / mutate
+  S-->>U: frame (town, chart, tape, guilds)
+```
+
+---
+
+## The town
+
+A 20×14 diorama with a working road grid, three new social hubs, and fifteen locations.
+
+```
+Legend:  . grass   = horizontal road   | vertical road   # building
+         * tree    ~ water            : sidewalk
+
+***...|.....|....***
+*.....|.....|......*
+..###.|.###.|.###...
+..###.|.###.|.###...
+====================
+......|.....|.......
+..##..|.###.|..##...
+..##..|.###.|..##...
+::::::|:::::|:::::::
+...*..|..~~.|..*....
+...*..|..~~.|..*....
+::::::|:::::|:::::::
+......|.###.|.......
+.**..*|.###.|*..**..
+```
+
+| Location | Center | Role |
+|---|---|---|
+| 🔵 Blue Roof House | (3, 2) | INTJ · INTP · ENTJ · ENTP |
+| 🔴 Red Roof House | (9, 2) | INFJ · INFP · ENFJ · ENFP |
+| 🟢 Green Roof House | (15, 2) | ISTJ · ISFJ · ESTJ · ESFJ |
+| 🟤 Yellow Roof House | (2, 6) | ISTP · ISFP · ESTP · ESFP |
+| ☕ Morning Brew Cafe | (9, 6) | social buzz, herding |
+| 📚 Data Library | (15, 6) | quiet analysis |
+| 📊 Trading Floor | (2, 9) | fast reactions |
+| 🌿 Willow Park | (11, 9) | independent thought |
+| 🌳 Town Square | (9, 12) | crowd courage |
+| 🔭 Observatory | (17, 10) | physicist |
+| 📐 Math Tower | (18, 2) | mathematician |
+| 🔮 Fortune Tent | (1, 11) | mystic |
+| **📰 Rumor Mill** | **(5, 5)** | **herding +25%, faster reactions** |
+| **🧪 Quant Lab** | **(13, 10)** | **analysis + learning-rate boost** |
+| **🏛️ Guild Hall** | **(5, 10)** | **debate, coalition and imitation** |
+
+The new hubs are not decoration. They modify the environment parameters the traders
+experience and create places where strategies can spread:
+
+- **Rumor Mill** increases herding and reaction speed. Narratives get loud here.
+- **Quant Lab** raises tech weighting and extends holding periods; closes made while
+  an agent is at the lab receive a **1.7× learning-rate boost**.
+- **Guild Hall** raises herding and risk appetite; conversations here slightly increase
+  imitation probability. It is also the Social Engineer's home.
+
+The day/night cycle is stylised independently of the market clock: each replay day runs
+from dawn through dusk into night, with emissive windows, street lamps, stars, fireflies
+and occasional rain. The town is rendered with Three.js r160, vendored locally; there is
+no build step.
+
+---
+
+## The traders and observers
+
+### 16 MBTI traders
+
+Each trader starts with a genome derived from its MBTI dimensions. The genome is a
+**prior**, not a destiny: it is edited by realised P&L, copied from peers and mutated.
+
+| ID | Name | Instinct | Starts near |
+|---|---|---|---|
+| INTJ | Architect | Quant analyst, sees patterns before they form | 📚 |
+| INTP | Logician | Data obsessive, needs ten signals to act | 📚 |
+| ENTJ | Commander | Treats the market like a battlefield | 📊 |
+| ENTP | Debater | Contrarian, fades consensus | ☕ |
+| INFJ | Advocate | Reads sentiment like a therapist | 🌿 |
+| INFP | Mediator | Trades visual harmony | 🌿 |
+| ENFJ | Protagonist | Community leader; calls get followed | 🌳 |
+| ENFP | Campaigner | Every trade is the next big thing | ☕ |
+| ISTJ | Logistician | Retired accountant, process over noise | 📊 |
+| ISFJ | Defender | Capital preservation first | 🏠 |
+| ESTJ | Executive | Military discipline, hates indecision | 📊 |
+| ESFJ | Consul | FOMO-driven; buys what others buy | 🌳 |
+| ISTP | Virtuoso | Precise entries during lunch break | ☕ |
+| ISFP | Adventurer | Trades by rhythm and feel | 🌿 |
+| ESTP | Entrepreneur | Ex-poker pro, thrives on volatility | ☕ |
+| ESFP | Entertainer | Every trade is a performance | 🌳 |
+
+### 4 observers
+
+| Agent | Lens | What it reads | Confidence |
+|---|---|---|---|
+| 🔭 **Physicist** | statistical mechanics | order parameter, dispersion, susceptibility, correlation length, strategy diversity | 70–85% |
+| 📐 **Mathematician** | graph theory | trust components, centrality, sentiment partition, guild composition, diversity | 75–95% |
+| 🧩 **Social Engineer** | social systems | trust density, broker concentration, clustering, polarization, imitation flow, cascade risk, interventions | 66–90% |
+| 🔮 **Mystic** | tea leaves | cosmic resonance, karmic debt, the Dao of market coupling | 5–45% |
+
+Observers do not trade. They publish roughly every 20 ticks. The Social Engineer also
+reads the **strategy ecosystem**: guild counts, dominant playbook, mutation/imitation
+events, and the latest adaptation. Its reports include a concrete intervention, e.g.
+*"seed a dissenting signal at the Rumor Mill"* when narrative lock-in rises.
+
+---
+
+## Strategy evolution
+
+Each trader owns a small, inspectable genome:
+
+```
+signal weights:  trend · reversion · RSI · herding · influence · memory   (sum = 1)
+traits:          risk · patience · contrarian · noise
+lineage:         generation · wins · losses · adaptations · last adaptation
+```
+
+### 1. Prior
+
+`genome_from_persona()` translates MBTI-derived parameters into an initial genome.
+A contrarian introvert starts with a large reversion weight; an extraverted feeler
+starts with more herding and memory.
+
+### 2. Experience
+
+Every buy carries the signal context that produced it. When the position closes, the
+realised return becomes a reward:
+
+```
+reward    = clip(trade_return / 2%, -1, 1)
+Δw_signal = η · reward · entry_signal
+```
+
+Supportive signals are reinforced after wins and down-weighted after losses. Risk and
+patience also adapt. The update is a lightweight, online, reward-modulated learner — not
+a claim of alpha; it is a mechanism for visible behavioural change.
+
+### 3. Imitation
+
+After a conversation, a lower-fitness trader may borrow a blend of a higher-fitness
+trader's playbook:
+
+```
+learner_gene ← 0.76 · learner_gene + 0.24 · teacher_gene + mutation
+```
+
+The trust graph gates the probability; the Quant Lab adds a large bonus, the Guild Hall
+a small one. This is how strategy guilds form.
+
+### 4. Mutation
+
+Every 20 ticks, a small fraction of genomes explore a random variation. Mutations that
+change the dominant signal show up as guild drift in the observers' reports.
+
+### 5. Guilds
+
+Genomes are classified as **momentum**, **mean reversion**, **sentiment**, **contrarian**
+or **balanced**. The result is not a leaderboard of fixed personalities; it is a
+population that can split, cluster, imitate and drift.
+
+<p align="center">
+  <img src="docs/screenshot-strategy.png" alt="Evolved strategy panel" width="520">
   <br>
-  <i>16 MBTI traders + 3 observer agents. Real stock data. Fragile equilibria. LLM-powered souls.</i>
-</p>
-
-<p align="center">
-  <sub><a href="README_CN.md">📖 中文文档</a></sub>
+  <sub>The Strategy tab: family, generation, fitness, learned signal weights and traits.</sub>
 </p>
 
 ---
 
-## 💡 Concept
+## The market
+
+### Signals
+
+The shared indicator engine computes, per symbol and per tick:
 
 ```
-Real stock bars  ──forced projection──→  🏪 Town Market
-                                              │
-     ┌────────────────────────────────────────┼────────────────────────┐
-     ▼                        ▼               ▼                        ▼
-  🧠 Observe·Reflect·Memory  💬 Chat·Spread   📈 Personality-driven    🔭📐🔮 Observer
-                              Sentiment        Trading                 Reports
-     │                        │               │                        │
-     └────────────────────────┼───────────────┘                        │
-                              ▼                                        │
-                    ⚖️ Hedging Engine (House MM)                       │
-                    Absorbs net imbalance → Price ≡ Real Price          │
-                              │                                        │
-                              ▼                                        │
-              🔄 Fragile equilibrium → Break → New equilibrium → Break │
+trend       = tanh(momentum_5 / (realised_vol × √5))
+reversion   = -tanh((close − SMA20) / ATR14)
+rsi_signal  = (50 − RSI14) / 50
+social      = herding · herd + influence · trust + memory · memory_sentiment
+composite   = Σ genome_weights × signals + bounded noise
 ```
 
-> Historical K-lines advance tick by tick. Agents observe price changes, form reflections, hold conversations, and place orders. All net imbalance is absorbed by a House market-maker, guaranteeing the town's stock price equals the real-world price. The tension between agent sentiment and real market movement forms a **fragile equilibrium that keeps breaking**.
+The genome weights sum to one, so the composite remains in `[-1, 1]` before noise.
+Contrarians flip the trend component and amplify reversion. Each decision cycle allows
+one deliberate order per agent, which keeps the tape readable.
+
+### Matching and the House
+
+```mermaid
+flowchart TD
+  A["agent buy / sell intents"] --> B{"limits cross?"}
+  B -->|yes| C["internal cross<br/>price/time priority, partial fills"]
+  B -->|no| D["House absorbs residual<br/>real price ± half-spread"]
+  C --> E["executions + close events"]
+  D --> E
+  E --> F["fees → treasury<br/>buys → average cost<br/>sells → realised P&L"]
+  F --> G["wealth invariant check"]
+```
+
+The House is what makes the town's quoted price equal the real replay price. Agents do
+not move the market — by design. They compete for execution, sentiment and survival
+within it. A replay loop starts a **new season**: portfolios, memories, observers and
+strategy lineages reset together, so the ledger is coherent across the loop boundary.
+
+### Risk metrics
+
+Each trader now reports **max drawdown**, **win rate over closed trades**, and the
+number of closed trades. These live in the Account tab alongside equity, cash, realised
+and unrealised P&L.
 
 ---
 
-## 🎬 Demo
+## Guilds: reading the emergent field
 
-![Agent Street Demo](docs/screenshot.gif)
+![Guilds view](docs/screenshot-guilds.png)
 
-> _16 MBTI agents trading, chatting, and moving through Agent Street in real-time. ~10 seconds._
+The **Guilds** tab turns the population of strategies into a field:
 
-## 🗺️ Town Map
+- x-axis: trend weight; y-axis: reversion weight
+- each point is a trader, coloured by guild, sized by generation
+- direct labels for the highest-fitness points; hover any point for its full genome
+- the legend shows guild counts, average fitness and the latest adaptation
+- the top line shows the ecosystem generation and dominant playbook
 
-```
-Actual 20x14 tile map generated from backend/models/town.py:
+Clusters are meaningful. A dense contrarian cluster near the Rumor Mill, a momentum
+cluster near the Trading Floor, a broker who bridges both, a quiet lab agent whose
+weights are drifting — these are the visible footprints of the social system.
 
-Legend:  . grass  = road  | road_v  # building  * tree  ~ water  : sidewalk
-
-***..............***
-*..................*
-..###...###...###...
-..###...###...###...
-::::::::::::::::::::
-....................
-..##....###....##...
-..##....###....##...
-::::::::::::::::::::
-...*....~~....*....
-...*....~~....*....
-::::::::::::::::::::
-........###.........
-.**..*..###..*..**..
-
-Locations:
-  Blue Roof House (2,2)    Red Roof House (9,2)   Green Roof House (14,2)
-  Yellow Roof House (2,6)  Morning Brew Cafe (9,6) Data Library (15,6)
-  Trading Floor (2,9)      Willow Park (9,9)       Town Square (9,12)
-  Observatory (17,10)       Math Tower (18,2)       Fortune Tent (1,11)
-```
-
-## 🖥️ Interface
-
-<table>
-<tr>
-<td width="65%">
-
-```
-        🏘️  Agent Street (20×14 tile town map)
-
-         ┌──────────┐  ┌──────────┐  ┌──────────┐    ┌──────────┐
-         │ 🏠 Blue  │  │ 🏠 Red   │  │ 🏠 Green │    │ 📐 Math  │
-         │  Roof    │  │  Roof    │  │  Roof    │    │  Tower   │
-         │INTJ INTP │  │INFJ INFP │  │ISTJ ISFJ │    │(observer)│
-         │ENTJ ENTP │  │ENFJ ENFP │  │ESTJ ESFJ │    └──────────┘
-         └──────────┘  └──────────┘  └──────────┘
-         ═══════════════════════════════════════════════  ← Main Road
-         ┌─────┐    ┌──────────┐              ┌──────────┐
-         │ ☕   │    │ 🏠 Yellow│              │ 📚 Data  │
-         │Cafe │    │  Roof    │              │ Library  │
-         └─────┘    │ISTP ISFP │              └──────────┘
-                    │ESTP ESFP │
-         ═══════════┴──────────╩════════════════════════
-    ┌──────────┐  ┌──────────┐  ┌────┐
- 🔮 │ Fortune  │  │📊Trading │  │🌿  │          ┌──────────┐
-    │  Tent    │  │  Floor   │  │Park│          │ 🔭 Obser-│
-    └──────────┘  └──────────┘  └────┘          │  vatory  │
-         ═══════════════════════════════════     └──────────┘
-              ┌────────────┐
-              │ 🌳 Town    │
-              │   Square   │
-              └────────────┘
-```
-
-</td>
-<td width="35%">
-
-**Every tick pushes live:**
-- 📍 19 agents moving on the map
-- 💬 Chat bubbles with actual dialog
-- 😊 Mood expressions (calm/panic/excited)
-- 📈 5-line stock chart (% change)
-- 🏆 Real-time P&L leaderboard
-- 📝 Trade feed with rationale
-- 🔭📐🔮 Observer reports
-
-**Click an agent** → View memory
-- Recent reflections
-- Conversations heard
-- Personal backstory
-
-</td>
-</tr>
-</table>
+The Social Engineer's report reads the same data differently: trust density, broker
+degree, clustering coefficient, polarization, imitation count and a cascade-risk
+assessment. The Mathematician reads partitions and components. The Physicist reads
+order parameters and susceptibility. Four lenses, one system.
 
 ---
 
-## 🚀 Quick Start
+## Interface
+
+| Panel | What it shows |
+|---|---|
+| **The Town** | Three.js diorama; drag to orbit, scroll to zoom, hover/click an agent |
+| **Market** | **Candles** (OHLC + volume + MA9/MA21), **Compare** (normalised lines), **Guilds** (strategy field) |
+| **Leaderboard** | Mark-to-market equity, return and each trader's current guild code; click to inspect |
+| **Stats strip** | Total equity, crowd sentiment meter, breadth, trading fees |
+| **Agent · Account** | Equity sparkline, cash, realised/unrealised P&L, positions, max drawdown, win rate, closed trades, composite signals, holdings, thoughts |
+| **Agent · Strategy** | Guild, generation, fitness, learned signal weights, risk/patience/contrarian/noise, latest adaptation |
+| **Observers** | Four cards — Physicist, Mathematician, Social Engineer, Mystic — with confidence |
+| **Tape** | Live executions: side, size, price, reason, counterparty, fee, cross/house |
+
+Keyboard: **Space** start/stop · **R** reset · **C** reset camera.
+
+---
+
+## Quick Start
 
 ```bash
 git clone https://github.com/huiihao/agent-street.git
@@ -147,188 +424,206 @@ pip install -r requirements.txt
 python run.py
 ```
 
-Open **http://localhost:8765**, click **START**.
+Open **http://localhost:8766** and press **Start**.
 
-✅ Works out of the box — no API key needed.
-
----
-
-## 🤖 LLM Integration (optional, recommended)
-
-Set environment variables to let LLMs power agent reflections and conversations:
+- ✅ No API key required.
+- 📡 Uses yfinance / Yahoo's public chart endpoint; a warm cache is used when available.
+- 🧪 Offline? The app clearly falls back to labelled synthetic bars.
+- 🎨 Three.js is vendored under `frontend/vendor/three`; no npm or bundler.
 
 ```bash
+# Tests
+python -m unittest discover -s tests -v
+```
+
+---
+
+## Configuration
+
+Every value can be overridden with an environment variable. Defaults live in
+`backend/config.py`.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SYMBOLS` | `AAPL,GOOGL,MSFT,TSLA,AMZN` | Universe (comma-separated) |
+| `INITIAL_CASH` | `10000` | Starting cash per trader |
+| `TICK_INTERVAL_SEC` | `1.5` | Real seconds per replay bar |
+| `MAX_SPEED` | `20` | Speed cap |
+| `BUY_THRESHOLD` / `SELL_THRESHOLD` | `0.12` / `-0.10` | Composite thresholds |
+| `MAX_POSITION_PCT` | `0.32` | Position cap (before risk scaling) |
+| `FEE_BPS` / `SLIPPAGE_BPS` | `2` / `3` | Fees and House half-spread |
+| `HIST_DAYS_BACK` | `5` | Trading sessions to load |
+| `HIST_INTERVAL` | `5m` | `1m / 5m / 15m / 30m / 1h` |
+| `WARMUP_BARS` | `30` | Bars consumed before replay starts |
+| `CACHE_TTL_SEC` | `900` | Fresh-cache lifetime |
+| `DATA_SOURCE` | `auto` | `auto / yfinance / yahoo_chart / ifind / alphavantage / synthetic` |
+| `SIM_SEED` | `7` | Deterministic decisions/synthetic data (`0` = random) |
+| `ALPHA_VANTAGE_API_KEY` | empty | Explicit source only |
+| `IFIND_API_KEY` / `IFIND_API_SECRET` | empty | Optional institutional iFinD |
+| `LLM_ENABLED` | `false` | Background LLM reflection enrichment |
+| `LLM_API_KEY` | empty | OpenAI-compatible key |
+| `LLM_BASE_URL` / `LLM_MODEL` | OpenAI / `gpt-4o-mini` | Any compatible endpoint |
+| `LLM_CONVERSATIONS` | `false` | Opt-in LLM conversation lines |
+
+```powershell
 # Windows PowerShell
-$env:LLM_ENABLED="true"
-$env:LLM_API_KEY="sk-xxxxxxxxxxxxx"
-$env:LLM_MODEL="gpt-4o-mini"
+$env:SYMBOLS="AAPL,NVDA,META"
+$env:HIST_INTERVAL="1m"
+$env:DATA_SOURCE="yfinance"
+python run.py
+```
 
+```bash
 # Linux / macOS
-export LLM_ENABLED=true
-export LLM_API_KEY="sk-xxxxxxxxxxxxx"
+SYMBOLS=AAPL,NVDA,META HIST_INTERVAL=1m python run.py
 ```
 
-Compatible with any OpenAI-format API:
+---
 
-| Backend | `LLM_BASE_URL` |
+## Data pipeline
+
+```mermaid
+flowchart TD
+  A["DATA_SOURCE=auto"] --> B{"fresh real cache?"}
+  B -->|yes| C["use cached aligned bars"]
+  B -->|no| D["yfinance batch"]
+  D -->|fail| E["Yahoo chart API"]
+  E -->|fail| F["iFinD (if configured)"]
+  F -->|fail| G["stale cache"]
+  G -->|fail| H["correlated synthetic bars<br/>(clearly labelled)"]
+```
+
+| Concern | Implementation |
 |---|---|
-| OpenAI | `https://api.openai.com/v1` |
-| DeepSeek | `https://api.deepseek.com/v1` |
-| Anthropic (via proxy) | `https://api.anthropic.com/v1` |
-| Ollama (local) | `http://localhost:11434/v1` |
-| vLLM / LM Studio | `http://localhost:8000/v1` |
-
-Without an API key, rule-based templates take over automatically.
-
----
-
-## 👥 Agents
-
-### 16 MBTI Traders
-
-Each personality maps to 10 trading parameters via a continuous function of E/I, S/N, T/F, J/P dimensions.
-
-| 🎨 | ID | Name | Style | Haunt |
-|---|---|---|---|---|
-| `#4A6FA5` | **INTJ** | Architect | Quant analyst, sees patterns before they form | 📚 |
-| `#6B7DB3` | **INTP** | Logician | Data obsessive, needs 10 signals to act | 📚 |
-| `#C4543E` | **ENTJ** | Commander | Treats the market like a battlefield | 📊 |
-| `#D4853A` | **ENTP** | Debater | Contrarian, fades every consensus | ☕ |
-| `#5B9E6F` | **INFJ** | Advocate | Reads market sentiment like a therapist | 🌿 |
-| `#7DB37D` | **INFP** | Mediator | Trades by visual harmony in the charts | 🌿 |
-| `#D4A843` | **ENFJ** | Protagonist | Community leader, people follow their calls | 🌳 |
-| `#E8B84B` | **ENFP** | Campaigner | Every trade is the next big thing | ☕ |
-| `#5A7A9A` | **ISTJ** | Logistician | Retired accountant, 30-year track record | 📊 |
-| `#6B9E8A` | **ISFJ** | Defender | Capital preservation above all | 🏠 |
-| `#B84D3E` | **ESTJ** | Executive | Military discipline, process > hunches | 📊 |
-| `#C46D5E` | **ESFJ** | Consul | FOMO-driven, buys what others buy | 🌳 |
-| `#4A7A9A` | **ISTP** | Virtuoso | Mechanic, precise entries during lunch break | ☕ |
-| `#5B9E7A` | **ISFP** | Adventurer | Musician, trades by rhythm and feel | 🌿 |
-| `#C46D3E` | **ESTP** | Entrepreneur | Ex-poker pro, thrives on volatility | ☕ |
-| `#D48D5E` | **ESFP** | Entertainer | Every trade is a performance | 🌳 |
-
-### 🔭📐🔮 3 Observers
-
-Three non-trading agents who analyze the system from the outside:
-
-| 🎨 | ID | Name | Location | Approach | Confidence |
-|---|---|---|---|---|---|
-| `#7B9ECF` | **physicist** | Physicist | 🔭 Observatory | Statistical physics, phase transitions, order parameters, correlation lengths | 70–85% |
-| `#9E7BCF` | **mathematician** | Mathematician | 📐 Math Tower | Graph theory, combinatorial optimization, sentiment topology, clique detection | 75–90% |
-| `#CF7BAE` | **mystic** | Mystic | 🔮 Fortune Tent | I Ching, tea leaves, cosmic energy, astrology, vibes | 5–45% ⭐ |
-
-Each generates a report every ~20 ticks in their own domain language.
+| Time zones | Bars normalised to UTC; replay clock displayed in `America/New_York` |
+| Alignment | Timestamp intersection; limited forward-fill union fallback |
+| Validation | Finite/positive prices, OHLC repair, bad-wick filter, duplicate removal |
+| History | Trimmed to the last `HIST_DAYS_BACK` trading sessions |
+| Cache | `.cache/bars_{interval}_{days}_{hash}.json`, atomic writes, 15 min TTL |
+| Transparency | Source, cache age, warnings and dropped symbols in `/api/status` and the UI |
+| Warm-up | `WARMUP_BARS` bars prime indicators before replay starts |
 
 ---
 
-## ⚖️ Hedging Engine
+## API
 
-```
-Agent trade intents
-    │
-    ├─ ✅ Matchable  ──→  Agent A buys ←→ Agent B sells (direct cross)
-    │
-    └─ ❌ Unmatched  ──→  🏛️ House market-maker absorbs
-                           │
-                           ├─ Net buying  → House sells (goes short)
-                           ├─ Net selling → House buys (goes long)
-                           │
-                           └─ Net effect: Town price ≡ Real price
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/bootstrap` | Personas, town, aligned history, source, recent reports/trades |
+| `GET /api/status` | Tick, speed, bar progress, source, cache warnings, invariant failures |
+| `GET /api/market` | Read-only current bar (never advances) |
+| `GET /api/market/history?limit=180` | Read-only aligned bars ending at the replay index |
+| `GET /api/health` | `ok` only for real, non-stale data |
+| `GET /api/town`, `GET /api/personas` | Static definitions (20 agents, 15 locations) |
+| `POST /api/sim/start` / `stop` / `reset` | Control |
+| `WS /ws` | Frames, sim state, hello, speed, reset, ping |
+
+---
+
+## Tests
+
+```bash
+python -m unittest discover -s tests -v
 ```
 
----
+**21 tests**, covering:
 
-## 🔧 Configuration
+- bar cleaning, OHLC repair and timezone handling
+- multi-symbol intersection alignment and cache round-trips
+- synthetic cross-sectional correlation
+- indicator direction and bounds
+- limit enforcement, partial fills, fees and average cost
+- realised P&L, win rate, close events and the wealth invariant
+- strategy priors, reward updates, mutation/learning state and guild reporting
 
-Edit `backend/config.py`:
-
-```python
-# 📡 Historical data replay
-HIST_DAYS_BACK = 5        # Days of history to load
-HIST_INTERVAL = "5m"      # Bar interval: 1m / 5m / 15m / 30m / 1h
-HIST_LOOP = True          # Loop when data runs out
-
-# ⏱️ Simulation speed
-TICK_INTERVAL_SEC = 1.5   # Seconds per tick
-
-# 📈 Symbols
-SYMBOLS = ["AAPL", "GOOGL", "MSFT", "TSLA", "AMZN"]
-
-# 💵 Agent parameters
-INITIAL_CASH = 10_000.0   # Starting cash per agent
-BUY_THRESHOLD = 0.08      # Buy signal threshold
-SELL_THRESHOLD = -0.05    # Sell signal threshold
-```
+The runtime has also been exercised with a small synthetic provider to verify that a
+replay loop resets portfolios, strategy generations, observers and the House treasury
+together.
 
 ---
 
-## 🧱 Project Structure
+## Project layout
 
 ```
 agent-street/
 ├── backend/
-│   ├── main.py              # FastAPI entry | REST + WebSocket
-│   ├── config.py            # All tunable parameters
-│   ├── ws_manager.py        # WebSocket broadcast manager
-│   ├── models/
-│   │   ├── portfolio.py     # Holdings, trade intents, agent state
-│   │   ├── market.py        # Simulation frame, snapshots
-│   │   └── town.py          # 20×14 town map, 12 locations, BFS pathfinding
+│   ├── main.py                  # FastAPI: bootstrap, status, market, WebSocket
+│   ├── config.py                # env-overridable configuration
+│   ├── ws_manager.py            # frame serialisation + bounded broadcasts
 │   ├── engine/
-│   │   ├── simulation.py    # 🎯 Main loop: orchestrates all subsystems
-│   │   ├── market_data.py   # 📡 yfinance historical bar replay
-│   │   ├── persona_engine.py# 🧠 MBTI → trading decisions
-│   │   ├── matching_engine.py# ⚖️ Hedging engine + House market-maker
-│   │   ├── memory_system.py # 🗄️ 3-layer memory (observe→reflect→long-term)
-│   │   ├── daily_routine.py # 🚶 MBTI schedules + town movement
-│   │   ├── conversation.py  # 💬 Agent-to-agent conversation
-│   │   ├── observer_engine.py# 🔭📐🔮 Observer report generation
-│   │   └── llm_client.py    # 🤖 LLM API client (optional)
-│   └── mbti/
-│       ├── types.py         # Personality dimensions, parameter derivation
-│       └── personas.py      # 16 agent definitions
+│   │   ├── simulation.py        # tick loop, sessions, snapshots, accounting
+│   │   ├── market_data.py       # fetch, validate, align, cache, synthetic
+│   │   ├── indicators.py        # shared momentum/RSI/ATR/volatility engine
+│   │   ├── strategy.py          # genomes, reward learning, imitation, guilds
+│   │   ├── persona_engine.py    # genome-weighted, risk-managed decisions
+│   │   ├── matching_engine.py   # crosses, House, fees, close events
+│   │   ├── memory_system.py     # grounded observations → reflections
+│   │   ├── conversation.py      # cooldowns, debates, optional LLM
+│   │   ├── observer_engine.py   # physicist, mathematician, social engineer, mystic
+│   │   ├── daily_routine.py     # schedules + BFS movement
+│   │   ├── influence_network.py # trust graph + environment modifiers
+│   │   ├── ifind_connector.py   # optional iFinD connector
+│   │   └── llm_client.py        # async OpenAI-compatible client
+│   ├── models/                  # portfolio, market frames, town map
+│   └── mbti/                    # personality definitions and priors
 ├── frontend/
-│   ├── index.html           # Single-page app
-│   ├── css/style.css        # Pixel-art dark theme
-│   └── js/
-│       ├── app.js           # Bootstrap + event wiring
-│       ├── ws_client.js     # WebSocket client (auto-reconnect)
-│       ├── rendering/
-│       │   └── pixel_art.js # 8×8 procedural pixel sprites
-│       └── canvas/
-│           ├── town_map.js       # 🗺️ Town map renderer
-│           ├── stock_chart.js    # 📈 5-line %-change chart
-│           ├── leaderboard.js    # 🏆 P&L ranking
-│           ├── trade_feed.js     # 📝 Scrolling trade log
-│           ├── agent_detail.js   # 👤 Agent detail panel
-│           └── observer_reports.js# 🔭📐🔮 Observer report panel
+│   ├── index.html
+│   ├── css/style.css
+│   ├── js/
+│   │   ├── main.js              # bootstrap, WebSocket, controls
+│   │   ├── town3d.js            # Three.js diorama + agents + lighting
+│   │   ├── market_chart.js      # candles / compare / guilds / tooltips
+│   │   ├── leaderboard.js       # DOM leaderboard + guild codes
+│   │   ├── agent_detail.js      # Account / Strategy tabs
+│   │   ├── observer_reports.js  # four observer cards
+│   │   ├── trade_feed.js
+│   │   ├── ws_client.js
+│   │   └── utils.js
+│   └── vendor/three/            # pinned Three.js r160 + OrbitControls
+├── tests/
+│   ├── test_market_data.py
+│   ├── test_indicators.py
+│   ├── test_matching.py
+│   └── test_strategy.py
+├── docs/
+│   ├── screenshot.png
+│   ├── screenshot-guilds.png
+│   ├── screenshot-strategy.png
+│   └── screenshot.gif
 ├── requirements.txt
-├── run.py
-├── README.md
-└── README_CN.md
+└── run.py                       # http://localhost:8766
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## Design notes and limits
 
-| Layer | Technology |
-|---|---|
-| 🐍 Backend | Python 3.10+ · FastAPI |
-| 📡 Data | yfinance (Yahoo Finance) |
-| 🤖 AI | OpenAI-compatible API (optional) |
-| 🎨 Frontend | Vanilla JS · HTML5 Canvas |
-| 🔤 Font | Press Start 2P (Google Fonts) |
+- **The House absorbs residual flow.** This is deliberate: the town price tracks the
+  real replay price, so agents cannot invent alpha by moving the market. Their P&L
+  comes from timing, sizing and execution against each other and the House.
+- **A replay loop is a new season.** Portfolios, memories, strategy generations, the
+  House treasury and observers reset together. This avoids a mark-to-market jump at
+  the loop boundary and keeps the invariant meaningful.
+- **The learner is lightweight.** It is an online reward-modulated update with
+  imitation and mutation — designed for visible behaviour and inspectability, not as a
+  production alpha model.
+- **No live trading.** This is a simulation. No broker integration, no real orders, no
+  financial advice.
+- **Optional dependencies.** yfinance is the default; iFinD and Alpha Vantage are
+  optional and explicitly selected. Synthetic data is always labelled.
+- **LLM is optional.** Rule-based reflections and conversations are always available;
+  LLM enrichment runs in background tasks with concurrency limits and timeouts.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
-This project draws inspiration from:
-
-- 🏘️ [**Generative Agents** (Park et al., 2023)](https://github.com/joonspk-research/generative_agents) — Stanford Smallville, LLM-powered generative agent town
-- 🧠 **MBTI personality theory** — applied to quantitative trading behavior modeling
-- 🎮 **Pixel art tradition** — the aesthetic legacy of 16-bit games
+- 🏘️ [Generative Agents (Park et al., 2023)](https://github.com/joonspk-research/generative_agents) — memory streams, reflection, Smallville
+- 🧠 MBTI personality theory — used as an evolvable behavioural prior, not a verdict
+- 🎮 [Three.js](https://threejs.org/) — the diorama renderer
+- 📡 [yfinance](https://github.com/ranaroussi/yfinance) — public market data
+- 📊 The dark chart palette follows a validated categorical/diverging scheme, so guild
+  identity never depends on colour alone.
 
 ---
 

@@ -1,135 +1,316 @@
-from backend.models.portfolio import TradeIntent, ExecutedTrade, PersonaState, Holding
+"""Order matching with an explicit market-maker ("House").
+
+Semantics
+---------
+* Agent orders cross each other at a price inside both limit prices. A cross is
+  only allowed when the best bid >= best offer; orders are price-then-time
+  prioritised and may partially fill.
+* Any residual order is absorbed by the House at the real market price adjusted
+  by a configurable half-spread. The House balance sheet is tracked, so the
+  simulation's total wealth is conserved (fees become a tracked treasury).
+* Buys capitalise fees into average cost. Sells realise P&L against that cost.
+  Zero-share positions are removed instead of lingering as ghosts.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from backend.config import FEE_BPS, MIN_FEE, SLIPPAGE_BPS
+from backend.engine.market_data import MarketSnapshot
+from backend.models.portfolio import ExecutedTrade, Holding, PersonaState, TradeIntent
+
+
+@dataclass
+class HouseState:
+    cash: float = 0.0
+    holdings: dict[str, int] = field(default_factory=dict)
+    fees: float = 0.0
+
+    def reset(self, symbols: list[str]) -> None:
+        self.cash = 0.0
+        self.holdings = {s: 0 for s in symbols}
+        self.fees = 0.0
+
+
+@dataclass
+class CloseEvent:
+    persona_id: str
+    symbol: str
+    shares: int
+    entry_price: float
+    exit_price: float
+    realized_pnl: float
+    fee: float
+    entry_context: dict
+    entry_tick: int
+    exit_tick: int
+    reason: str
+
+
+@dataclass
+class MatchOutcome:
+    trades: list[ExecutedTrade]
+    rejected: int = 0
+    crossed_shares: int = 0
+    house_shares: int = 0
+    closed_events: list[CloseEvent] = field(default_factory=list)
 
 
 class MatchingEngine:
-    def __init__(self, strict: bool = False):
-        self.strict = strict
+    def __init__(
+        self,
+        fee_bps: float = FEE_BPS,
+        slippage_bps: float = SLIPPAGE_BPS,
+        min_fee: float = MIN_FEE,
+    ):
+        self.fee_bps = max(0.0, float(fee_bps))
+        self.slippage_bps = max(0.0, float(slippage_bps))
+        self.min_fee = max(0.0, float(min_fee))
+        self._seq = 0
+
+    def reset(self) -> None:
+        self._seq = 0
+
+    # ── public API ───────────────────────────────────────────
 
     def match(
         self,
         intents: list[TradeIntent],
-        prices: dict[str, float],
+        snapshot: MarketSnapshot,
         personas: dict[str, PersonaState],
-        house_cash: float,
-        house_holdings: dict[str, int],
-    ) -> tuple[list[ExecutedTrade], float, dict[str, int]]:
+        house: HouseState,
+    ) -> MatchOutcome:
         trades: list[ExecutedTrade] = []
+        closed_events: list[CloseEvent] = []
+        rejected = 0
+        crossed = 0
+        house_shares = 0
 
-        # Group intents by symbol and direction
         by_symbol: dict[str, dict[str, list[TradeIntent]]] = {}
         for intent in intents:
-            if intent.symbol not in by_symbol:
-                by_symbol[intent.symbol] = {"BUY": [], "SELL": []}
-            by_symbol[intent.symbol][intent.direction].append(intent)
+            if intent.shares <= 0 or intent.symbol not in snapshot.bars:
+                continue
+            if intent.direction not in ("BUY", "SELL"):
+                continue
+            if intent.persona_id not in personas:
+                continue
+            by_symbol.setdefault(intent.symbol, {"BUY": [], "SELL": []})[intent.direction].append(intent)
 
-        for symbol, dir_map in by_symbol.items():
-            price = prices.get(symbol, 0)
-            if price <= 0:
+        for symbol, book in by_symbol.items():
+            ref_price = snapshot.bars[symbol].close
+            if ref_price <= 0:
                 continue
 
-            buys = self._sort_buys(dir_map["BUY"])
-            sells = self._sort_sells(dir_map["SELL"])
+            buys = sorted(book["BUY"], key=lambda x: (-x.limit_price, x.timestamp, x.persona_id))
+            sells = sorted(book["SELL"], key=lambda x: (x.limit_price, x.timestamp, x.persona_id))
 
-            # Direct crossing
+            # ── direct crosses ──────────────────────────────
             while buys and sells:
                 buy = buys[0]
                 sell = sells[0]
-                if buy.limit_price >= sell.limit_price or not self.strict:
-                    matched_shares = min(buy.shares, sell.shares)
-                    if matched_shares <= 0:
-                        if buy.shares <= 0:
-                            buys.pop(0)
-                        if sell.shares <= 0:
-                            sells.pop(0)
-                        continue
-
-                    # Validate
-                    buyer = personas.get(buy.persona_id)
-                    seller = personas.get(sell.persona_id)
-                    if not buyer or not seller:
-                        if not buyer:
-                            buys.pop(0)
-                        if not seller:
-                            sells.pop(0)
-                        continue
-
-                    cost = matched_shares * price
-                    if buyer.cash < cost:
-                        buys.pop(0)
-                        continue
-                    seller_holding = seller.holdings.get(symbol)
-                    if not seller_holding or seller_holding.shares < matched_shares:
-                        sells.pop(0)
-                        continue
-
-                    # Execute cross
-                    buyer.cash -= cost
-                    seller.cash += cost
-
-                    if symbol not in buyer.holdings:
-                        buyer.holdings[symbol] = Holding(symbol=symbol, shares=0, avg_cost=0)
-                    bh = buyer.holdings[symbol]
-                    total_cost_b = bh.shares * bh.avg_cost + cost
-                    bh.shares += matched_shares
-                    bh.avg_cost = total_cost_b / bh.shares if bh.shares > 0 else 0
-
-                    seller.holdings[symbol].shares -= matched_shares
-
-                    ts = buy.timestamp
-                    trades.append(ExecutedTrade(buy.persona_id, symbol, "BUY", matched_shares, price, buy.reason, sell.persona_id, ts))
-                    trades.append(ExecutedTrade(sell.persona_id, symbol, "SELL", matched_shares, price, sell.reason, buy.persona_id, ts))
-
-                    buy.shares -= matched_shares
-                    sell.shares -= matched_shares
-                    if buy.shares <= 0:
-                        buys.pop(0)
-                    if sell.shares <= 0:
-                        sells.pop(0)
-                else:
+                if buy.limit_price + 1e-9 < sell.limit_price:
                     break
 
-            # House absorbs remaining intents
-            remaining = buys + sells
-            for intent in remaining:
-                if intent.shares <= 0:
-                    continue
-                persona = personas.get(intent.persona_id)
-                if not persona:
+                buyer = personas.get(buy.persona_id)
+                seller = personas.get(sell.persona_id)
+                if not buyer or not seller:
+                    if not buyer:
+                        buys.pop(0)
+                    if not seller:
+                        sells.pop(0)
+                    rejected += 1
                     continue
 
-                matched_shares = intent.shares
-                cost = matched_shares * price
+                price = min(buy.limit_price, max(sell.limit_price, (buy.limit_price + sell.limit_price) / 2.0))
+                affordable = self._affordable_shares(buyer, price)
+                available = self._available_shares(seller, symbol)
+                qty = min(buy.shares, sell.shares, affordable, available)
 
-                if intent.direction == "BUY":
-                    if persona.cash < cost:
-                        continue
-                    persona.cash -= cost
-                    if symbol not in persona.holdings:
-                        persona.holdings[symbol] = Holding(symbol=symbol, shares=0, avg_cost=0)
-                    bh = persona.holdings[symbol]
-                    total_cost = bh.shares * bh.avg_cost + cost
-                    bh.shares += matched_shares
-                    bh.avg_cost = total_cost / bh.shares if bh.shares > 0 else 0
-                    house_holdings[symbol] = house_holdings.get(symbol, 0) - matched_shares
-                    house_cash += cost
-                else:
-                    h = persona.holdings.get(symbol)
-                    if not h or h.shares < matched_shares:
-                        continue
-                    h.shares -= matched_shares
-                    persona.cash += cost
-                    house_holdings[symbol] = house_holdings.get(symbol, 0) + matched_shares
-                    house_cash -= cost
+                if qty <= 0:
+                    if affordable <= 0 or buy.shares <= 0:
+                        buys.pop(0)
+                        rejected += 1
+                    if available <= 0 or sell.shares <= 0:
+                        sells.pop(0)
+                        rejected += 1
+                    continue
+
+                trade_id = self._next_id()
+                fee_buy = self._fee(qty * price)
+                fee_sell = self._fee(qty * price)
+
+                self._apply_buy(buyer, symbol, qty, price, fee_buy, buy.timestamp, buy.context)
+                realized = self._apply_sell(
+                    seller, symbol, qty, price, fee_sell, sell.timestamp,
+                    sell.reason, closed_events,
+                )
+                house.fees += fee_buy + fee_sell
 
                 trades.append(ExecutedTrade(
-                    intent.persona_id, symbol, intent.direction,
-                    matched_shares, price, intent.reason, "HOUSE", intent.timestamp
+                    buy.persona_id, symbol, "BUY", qty, price, buy.reason,
+                    sell.persona_id, buy.timestamp, fee_buy, 0.0, trade_id, "cross",
+                ))
+                trades.append(ExecutedTrade(
+                    sell.persona_id, symbol, "SELL", qty, price, sell.reason,
+                    buy.persona_id, sell.timestamp, fee_sell, realized, trade_id, "cross",
                 ))
 
-        return trades, house_cash, house_holdings
+                buy.shares -= qty
+                sell.shares -= qty
+                crossed += qty
+                if buy.shares <= 0:
+                    buys.pop(0)
+                if sell.shares <= 0:
+                    sells.pop(0)
 
-    def _sort_buys(self, buys: list[TradeIntent]) -> list[TradeIntent]:
-        return sorted(buys, key=lambda x: x.limit_price, reverse=True)
+            # ── residual absorbed by the House ──────────────
+            for intent in [i for i in buys + sells if i.shares > 0]:
+                persona = personas.get(intent.persona_id)
+                if not persona:
+                    rejected += 1
+                    continue
 
-    def _sort_sells(self, sells: list[TradeIntent]) -> list[TradeIntent]:
-        return sorted(sells, key=lambda x: x.limit_price)
+                if intent.direction == "BUY":
+                    price = ref_price * (1.0 + self.slippage_bps / 10_000.0)
+                    if intent.limit_price + 1e-9 < price:
+                        rejected += 1
+                        continue
+                    qty = min(intent.shares, self._affordable_shares(persona, price))
+                    if qty <= 0:
+                        rejected += 1
+                        continue
+                    fee = self._fee(qty * price)
+                    self._apply_buy(persona, symbol, qty, price, fee, intent.timestamp, intent.context)
+                    house.cash += qty * price
+                    house.holdings[symbol] = house.holdings.get(symbol, 0) - qty
+                    house.fees += fee
+                    trades.append(ExecutedTrade(
+                        persona.persona_id, symbol, "BUY", qty, price, intent.reason,
+                        "HOUSE", intent.timestamp, fee, 0.0, self._next_id(), "house",
+                    ))
+                else:
+                    price = ref_price * (1.0 - self.slippage_bps / 10_000.0)
+                    if intent.limit_price - 1e-9 > price:
+                        rejected += 1
+                        continue
+                    qty = min(intent.shares, self._available_shares(persona, symbol))
+                    if qty <= 0:
+                        rejected += 1
+                        continue
+                    fee = self._fee(qty * price)
+                    realized = self._apply_sell(
+                        persona, symbol, qty, price, fee, intent.timestamp,
+                        intent.reason, closed_events,
+                    )
+                    house.cash -= qty * price
+                    house.holdings[symbol] = house.holdings.get(symbol, 0) + qty
+                    house.fees += fee
+                    trades.append(ExecutedTrade(
+                        persona.persona_id, symbol, "SELL", qty, price, intent.reason,
+                        "HOUSE", intent.timestamp, fee, realized, self._next_id(), "house",
+                    ))
+                house_shares += qty
+
+        return MatchOutcome(
+            trades=trades,
+            rejected=rejected,
+            crossed_shares=crossed,
+            house_shares=house_shares,
+            closed_events=closed_events,
+        )
+
+    # ── accounting ───────────────────────────────────────────
+
+    def _affordable_shares(self, persona: PersonaState, price: float) -> int:
+        if price <= 0 or persona.cash <= 0:
+            return 0
+        rate = self.fee_bps / 10_000.0
+        budget = persona.cash
+        shares = int(budget / (price * (1.0 + rate)))
+        # Account for the minimum fee and float dust.
+        while shares > 0 and shares * price * (1.0 + rate) + self.min_fee > budget + 1e-9:
+            shares -= 1
+        return max(0, shares)
+
+    @staticmethod
+    def _available_shares(persona: PersonaState, symbol: str) -> int:
+        holding = persona.holdings.get(symbol)
+        return max(0, holding.shares) if holding else 0
+
+    def _fee(self, notional: float) -> float:
+        return max(self.min_fee, round(notional * self.fee_bps / 10_000.0, 4))
+
+    def _apply_buy(
+        self,
+        persona: PersonaState,
+        symbol: str,
+        qty: int,
+        price: float,
+        fee: float,
+        tick: float,
+        context: dict | None = None,
+    ) -> None:
+        notional = qty * price
+        persona.cash -= notional + fee
+        holding = persona.holdings.get(symbol)
+        if holding is None or holding.shares <= 0:
+            persona.holdings[symbol] = Holding(
+                symbol=symbol,
+                shares=qty,
+                avg_cost=(notional + fee) / qty,
+                opened_tick=int(tick),
+                entry_context=dict(context or {}),
+            )
+        else:
+            old_cost = holding.avg_cost * holding.shares
+            holding.shares += qty
+            holding.avg_cost = (old_cost + notional + fee) / holding.shares
+
+    def _apply_sell(
+        self,
+        persona: PersonaState,
+        symbol: str,
+        qty: int,
+        price: float,
+        fee: float,
+        tick: float,
+        reason: str = "",
+        closed_events: list[CloseEvent] | None = None,
+    ) -> float:
+        holding = persona.holdings.get(symbol)
+        if holding is None or holding.shares <= 0:
+            return 0.0
+        qty = min(qty, holding.shares)
+        notional = qty * price
+        entry_price = holding.avg_cost
+        entry_tick = holding.opened_tick
+        entry_context = dict(holding.entry_context)
+        realized = (price - entry_price) * qty - fee
+        persona.realized_pnl += realized
+        persona.total_sells += 1
+        if realized > 0:
+            persona.winning_sells += 1
+        persona.cash += notional - fee
+        holding.shares -= qty
+        if holding.shares <= 0:
+            persona.holdings.pop(symbol, None)
+        if closed_events is not None:
+            closed_events.append(CloseEvent(
+                persona_id=persona.persona_id,
+                symbol=symbol,
+                shares=qty,
+                entry_price=entry_price,
+                exit_price=price,
+                realized_pnl=realized,
+                fee=fee,
+                entry_context=entry_context,
+                entry_tick=entry_tick,
+                exit_tick=int(tick),
+                reason=reason,
+            ))
+        return realized
+
+    def _next_id(self) -> str:
+        self._seq += 1
+        return f"T{self._seq:07d}"

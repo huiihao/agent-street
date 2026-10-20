@@ -32,30 +32,32 @@ class DailyRoutine:
         if is_extravert:
             schedule = [
                 (home_id, 3),
-                ("cafe", 4),
+                ("cafe", 3),
+                ("rumor", 3),
                 ("market", 3),
-                ("cafe", 2),
-                ("square", 5),
-                (home_id, 3),
+                ("hall", 3),
+                ("square", 3),
+                (home_id, 2),
             ]
         elif is_thinking:
             schedule = [
                 (home_id, 2),
-                ("library", 5),
-                ("market", 4),
+                ("library", 4),
+                ("lab", 4),
+                ("market", 3),
                 ("cafe", 2),
-                ("square", 3),
+                ("square", 2),
                 ("library", 2),
                 (home_id, 2),
             ]
         else:
             schedule = [
-                (home_id, 4),
+                (home_id, 3),
+                ("park", 4),
                 ("cafe", 3),
                 ("square", 2),
-                ("park", 4),
-                ("market", 2),
-                ("square", 3),
+                ("rumor", 2),
+                ("hall", 2),
                 (home_id, 2),
             ]
         # Perceiving types wander more (shorter stays)
