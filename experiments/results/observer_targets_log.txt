@@ -1,0 +1,64 @@
+observer target table
+       observer          metric   target                  target_label  discovery_within_rho  discovery_within_p  heldout_within_rho  heldout_within_p  heldout_run_rho  heldout_run_ci_lo  heldout_run_ci_hi  heldout_run_p  heldout_run_n  heldout_window_rho  heldout_window_p  heldout_window_n  primary_p  holm_p between_label  partial_rho  partial_p         control                                                 interpretation
+      physicist        d_avgVol f_absret future absolute market return               -0.0143              0.6584             -0.2000               0.0           0.9429             0.9015             0.9710            0.0            192              0.9429            0.0048                 6     0.0048  0.0048  window (n=6)          NaN        NaN                 between-window volatility regime; not a within-window forecast
+  mathematician  d_brokerDegree  f_trust          future trust density                0.7683              0.0000              0.7018               0.0           0.6977             0.6052             0.7702            0.0            192              1.0000            0.0000                 6     0.0000  0.0000   run (n=192)       0.3466        0.0    d_components                       trust-structure persistence / centrality
+social_engineer d_flowRiskScore   f_sync        future trade synchrony                0.1445              0.0000              0.0944               0.0           0.5923             0.4894             0.6806            0.0            192              0.6571            0.1562                 6     0.0000  0.0000   run (n=192)       0.4414        0.0 d_flowSynchrony     between-run coordination descriptor; level weak within-run
+         mystic     d_sentiment    f_ret           future agent return                0.1436              0.0000             -0.2068               0.0          -0.5775            -0.6804            -0.4541            0.0            192             -0.5429            0.2657                 6     0.0000  0.0000   run (n=192)          NaN        NaN                             placebo / current-state persistence; sign unstable
+
+delta-flow AUC
+    scope  level   predictor      outcome  threshold    auc  ci_lo  ci_hi    n  events
+discovery report        flow future_absdd     0.0030 0.5192 0.4838 0.5471  896     224
+discovery report  delta_flow future_absdd     0.0030 0.4467 0.4133 0.4811  896     224
+discovery report  flow_lag-1 future_absdd     0.0030 0.5855 0.5553 0.6155  896     224
+discovery report delta_lag-1 future_absdd     0.0030 0.4747 0.4400 0.5087  832     224
+discovery report  flow_lag-2 future_absdd     0.0030 0.5782 0.5409 0.6167  832     224
+discovery report delta_lag-2 future_absdd     0.0030 0.6496 0.6130 0.6869  768     224
+discovery    run        flow future_absdd     0.0044 0.8047 0.6750 0.9130   64      16
+discovery    run  delta_flow future_absdd     0.0044 0.7298 0.5616 0.8754   64      16
+discovery    run  flow_lag-1 future_absdd     0.0044 0.7995 0.6653 0.9124   64      16
+discovery    run delta_lag-1 future_absdd     0.0044 0.6992 0.5325 0.8458   64      16
+discovery    run  flow_lag-2 future_absdd     0.0044 0.8255 0.7010 0.9260   64      16
+discovery    run delta_lag-2 future_absdd     0.0044 0.7201 0.5654 0.8526   64      16
+  heldout report        flow future_absdd     0.0015 0.4941 0.4687 0.5198 2688     672
+  heldout report  delta_flow future_absdd     0.0015 0.4402 0.4146 0.4638 2688     672
+  heldout report  flow_lag-1 future_absdd     0.0015 0.5606 0.5395 0.5830 2688     672
+  heldout report delta_lag-1 future_absdd     0.0015 0.6124 0.5890 0.6364 2496     635
+  heldout report  flow_lag-2 future_absdd     0.0015 0.4225 0.3971 0.4474 2496     635
+  heldout report delta_lag-2 future_absdd     0.0015 0.5957 0.5685 0.6215 2304     514
+  heldout    run        flow future_absdd     0.0063 0.4426 0.3391 0.5522  192      48
+  heldout    run  delta_flow future_absdd     0.0063 0.5040 0.3999 0.6028  192      48
+  heldout    run  flow_lag-1 future_absdd     0.0063 0.4442 0.3374 0.5534  192      48
+  heldout    run delta_lag-1 future_absdd     0.0063 0.4990 0.3933 0.6023  192      48
+  heldout    run  flow_lag-2 future_absdd     0.0063 0.4430 0.3378 0.5489  192      48
+  heldout    run delta_lag-2 future_absdd     0.0063 0.5516 0.4528 0.6466  192      48
+
+delta-flow event study (held-out)
+  scope  lag  event     metric    mean   ci_lo   ci_hi    n
+heldout   -2  False flow_level  0.6286  0.6161  0.6415 1790
+heldout   -2  False delta_flow  0.0257  0.0198  0.0312 1790
+heldout   -2   True flow_level  0.6317  0.6157  0.6475  514
+heldout   -2   True delta_flow  0.1188  0.1030  0.1340  514
+heldout   -1  False flow_level  0.6247  0.6108  0.6377 1861
+heldout   -1  False delta_flow  0.0163  0.0118  0.0208 1861
+heldout   -1   True flow_level  0.6449  0.6308  0.6585  635
+heldout   -1   True delta_flow  0.1146  0.1019  0.1283  635
+heldout    0  False flow_level  0.6331  0.6193  0.6464 2016
+heldout    0  False delta_flow  0.0488  0.0443  0.0531 2016
+heldout    0   True flow_level  0.6264  0.6113  0.6413  672
+heldout    0   True delta_flow  0.0115 -0.0013  0.0238  672
+heldout    1  False flow_level  0.6256  0.6106  0.6401 1884
+heldout    1  False delta_flow -0.0068 -0.0110 -0.0027 1884
+heldout    1   True flow_level  0.6581  0.6423  0.6737  612
+heldout    1   True delta_flow  0.0359  0.0242  0.0481  612
+
+delta-flow per-window AUC
+window                       w1_2026_08_24  w2_2026_08_31  w3_2026_09_14  w4_2026_09_21  w5_2026_09_28  w6_2026_10_05
+predictor                                                                                                            
+delta_flow                           0.420          0.504          0.518          0.361          0.535          0.414
+delta_lag-1                          0.580          0.619          0.791          0.437          0.680          0.673
+delta_lag-1_event_minus_non          0.121          0.107          0.270         -0.053          0.182          0.186
+delta_lag-2                          0.643          0.710          0.400          0.698          0.447          0.423
+flow                                 0.425          0.568          0.478          0.476          0.607          0.489
+flow_lag-1                           0.501          0.567          0.445          0.608          0.589          0.591
+
+figures written

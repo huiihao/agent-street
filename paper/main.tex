@@ -55,10 +55,16 @@ uninformative; a flow-based score predicts future coordination both in and out o
 sample ($\rho=.59$--$.60$), but its discovery-window drawdown signal
 ($\rho=.61$; run-level AUC $.81$) reverses out of sample ($\rho=-.04$; AUC
 $.44$), and an event-level AUC is only $.53$. Polarization's sign flips across
-windows. The robust results are behavioural---learning diverges, imitation
-coordinates---while single-window performance and observer-warning claims are
-fragile; observer scores must be validated on the outcome they claim to predict,
-across held-out windows, at both run and event levels.
+windows. A target-specific follow-up separates the observer sensors: the
+Physicist is a between-window volatility descriptor, the Mathematician tracks
+trust structure, the Social Engineer's flow level ranks runs but not events, and
+the Mystic is a placebo. The flow change 20 ticks earlier has a modest
+event-level AUC of $.61$ (five of six windows) but no run-level signal---a
+candidate timing signal, not a validated warning. The robust results are
+behavioural---learning diverges, imitation coordinates---while single-window
+performance and observer-warning claims are fragile; observer scores must be
+validated on the outcome they claim to predict, across held-out windows, at both
+run and event levels.
 \end{abstract}
 
 \noindent\textbf{Keywords:} agent-based markets; social learning; imitation;
@@ -126,9 +132,13 @@ surviving and the failed claims as results.
   in and out of sample, but its strong discovery-window drawdown correlation
   ($\rho=.61$; run-level AUC $.81$) reverses on held-out windows
   ($\rho=-.04$; AUC $.44$), and the event-level AUC is $.53$. Polarization's sign
-  flips. We conclude that flow alignment is a coordination-persistence signal,
-  not a crash warning; observer scores need held-out, outcome-specific
-  validation at both run and event levels.
+  flips. We conclude that the flow \emph{level} is a coordination-persistence
+  signal, not a crash warning. A target-specific map shows that the observers are
+  different sensors (between-window volatility, trust structure, coordination,
+  placebo); the flow \emph{change} 20 ticks earlier reaches an event-level AUC of
+  $.61$ (five of six windows) but has no run-level signal. Observer scores need
+  held-out, outcome-specific validation at both run and event levels, with levels
+  and changes reported separately.
 \end{enumerate}
 
 \section{Related Work}
@@ -708,9 +718,123 @@ measure of order-flow alignment. The lesson is that a scalar labelled ``risk''
 must be validated against the outcome it claims to predict, on held-out windows,
 at both run and event levels. A run-level correlation can be driven by
 between-run heterogeneity; an event-level AUC asks whether a report is an early
-warning. The v2 score is a coordination-persistence signal, not a validated crash
-warning. The interactive application now labels the field ``flow-alignment
+warning. The v2 \emph{level} is a coordination-persistence signal, not a validated
+crash warning; the next subsection shows that its \emph{change} carries a modest
+event-level lead. The interactive application labels the field ``flow-alignment
 risk'' rather than ``cascade risk'' to reflect this distinction.
+
+\subsection{Target-specific observer map and flow changes}
+
+The field scan that motivated the observer audit treated each observer's metrics
+as possible risk signals. A formal follow-up asks a narrower question: does each
+observer have a target it reliably tracks? We fix one primary metric and one
+primary target per observer and evaluate them on the held-out windows
+(Table~\ref{tab:observer-targets}). Because the map was motivated by the
+discovery-window scan, the held-out columns are a temporal out-of-sample check,
+not a fully pre-registered design.
+
+The table separates between-run/window from within-window variation. The
+Physicist's average volatility and future absolute market return have a
+between-window $\rho=.943$ across six windows, but the within-window relation is
+negative ($-0.200$): the high correlation is a volatility-regime label, not 192
+independent forecasts. The Mathematician's broker degree tracks future trust
+density both within and between windows ($.702$ within, $.698$ between) and
+survives controlling current trust components ($.347$): a trust-structure sensor,
+not a risk score. The Social Engineer's flow level ranks runs ($\rho=.592$) but
+is weak within-run ($.094$) and has an event-level AUC of $.494$: it is a
+between-run coordination descriptor, not an event warning. The Mystic's sentiment
+has opposite signs in discovery ($+.144$) and held-out ($-.207$) and a negative
+run-level relation ($-.578$): a placebo/current-state signal. Confidence is also
+not calibration: it is computed from trade count and trust density, not realized
+forecast error; its run-level correlations with future $|$drawdown$|$ are at most
+$.16$ and change sign.
+
+\begin{table}[t]
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{2.5pt}
+  \caption{Target-specific observer audit. Each observer has one pre-specified
+  metric and target. ``Within'' is the report-level rank correlation after
+  removing window means (n=960 discovery, 2,880 held-out); ``between'' is the
+  window-level correlation for the Physicist (six windows) or the run-level
+  correlation for the other observers (192 runs). Partial controls the
+  Mathematician's current trust components and the Social Engineer's current flow
+  synchrony. Stars: $^{*}p<.05$, $^{**}p<.01$, $^{***}p<.001$; the within-window
+  $p$-values are autocorrelation-naive and descriptive. The Physicist's
+  run-level $.94$ is not an independent sample: it is a between-window
+  volatility relation, while the within-window relation is negative.}
+  \label{tab:observer-targets}
+  \begin{tabular}{lcccccl}
+    \toprule
+    Observer / metric & Target & Discovery within & Held-out within & Held-out between & Partial & Reading\\
+    \midrule
+    Physicist, avgVol & Future $|$mkt ret$|$ & $-0.014$ & $-0.200^{***}$ & $0.943^{**}$ (6) & -- & Volatility regime\\
+    Math., broker deg. & Future trust & $0.768^{***}$ & $0.702^{***}$ & $0.698^{***}$ (192) & $0.347^{***}$ & Trust persistence\\
+    Social Eng., flow risk & Future sync & $0.145^{***}$ & $0.094^{***}$ & $0.592^{***}$ (192) & $0.441^{***}$ & Between-run coordination\\
+    Mystic, sentiment & Future return & $0.144^{***}$ & $-0.207^{***}$ & $-0.578^{***}$ (192) & -- & Placebo / persistence\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+The second experiment asks whether the flow \emph{change} is a better event-level
+signal than the level. At the report whose next 20 ticks contain a top-quartile
+drawdown, flow$_t$ and $\Delta$flow$_t$ are uninformative or below chance
+(AUC $.494$ and $.440$); one report earlier, flow$_{t-1}$ reaches $.561$ and
+$\Delta$flow$_{t-1}$ reaches $.612$ (95\% CI $[.589,.636]$). The per-window count
+is five of six for both, with W4 the exception (AUC $.437$); the run-level AUC for
+$\Delta$flow$_{t-1}$ is $.499$. In the event study, $\Delta$flow is $.119$ at
+$-40$ ticks and $.115$ at $-20$ ticks for event reports, versus $.026$ and $.016$
+for non-events; the level is only slightly higher before the event, and
+$\Delta$flow collapses at the event itself. Figure~\ref{fig:delta-flow} shows the
+event-aligned means and the event-level AUCs. The pattern is a buildup of flow
+alignment before a drawdown window, not a persistent high level.
+
+\begin{table}[t]
+  \centering
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \caption{Flow level versus flow change (held-out windows). Event = a report
+  whose next 20-tick agent-equity drawdown is in the top quartile. ``Report''
+  AUC uses one observation per report; ``Run'' AUC uses one maximum future
+  drawdown per run. ``Windows'' counts the six held-out windows with AUC
+  $>0.5$. The level at $t$ is not an event warning; the change one report earlier
+  is a modest event-level lead, but the run-level AUC is at chance. The level
+  AUC is computed on the $\Delta$flow sample (the first report of each run has
+  no previous report), so it differs slightly from Table~\ref{tab:observer}; both
+  are near chance.}
+  \label{tab:delta-flow}
+  \begin{tabular}{lccc}
+    \toprule
+    Predictor & Report AUC & Run AUC & Windows $>0.5$\\
+    \midrule
+    flow$_t$ & $0.494$ $[0.469,0.520]$ & $0.443$ $[0.339,0.552]$ & 2/6\\
+    $\Delta$flow$_t$ & $0.440$ $[0.415,0.464]$ & $0.506$ $[0.400,0.603]$ & 3/6\\
+    flow$_{t-1}$ & $0.561$ $[0.540,0.583]$ & $0.444$ $[0.337,0.553]$ & 5/6\\
+    $\Delta$flow$_{t-1}$ & $0.612$ $[0.589,0.636]$ & $0.499$ $[0.393,0.602]$ & 5/6\\
+    $\Delta$flow$_{t-2}$ & $0.596$ $[0.569,0.622]$ & $0.552$ $[0.453,0.647]$ & 3/6\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\linewidth]{figures/fig_delta_flow.pdf}
+  \caption{Flow level versus flow change (held-out). Left: the flow level is
+  only slightly elevated around high-drawdown events and is persistent. Middle:
+  $\Delta$flow is already elevated 20--40 ticks before the event and collapses at
+  the event. Right: report-level AUC for high future $|$drawdown$|$; the lagged
+  change, not the level, is the best discriminator. The run-level AUC for the
+  lagged change is at chance (Table~\ref{tab:delta-flow}).}
+  \label{fig:delta-flow}
+\end{figure}
+
+We read this as a modest, event-level timing signal, not a validated warning. It
+does not improve run-level risk ranking, it has one window exception, and the
+effect size is small. It does show why the level and the change must be reported
+separately: the level is a coordination state, the change is a candidate
+early-warning derivative. A deployed observer should expose both, and should be
+evaluated with held-out event-level AUCs rather than a single run-level
+correlation.
 
 \subsection{The imitation network}
 
@@ -794,6 +918,17 @@ state and a metric that forecasts the outcome one cares about. Observer research
 should report the outcome-specific, held-out, run-level and event-level results,
 not only the in-sample correlation.
 
+The target-specific follow-up makes the level/change distinction concrete. The v2
+level is a between-run coordination state: it ranks runs ($\rho=.59$) but is weak
+within-run ($\rho=.09$) and does not discriminate drawdown events (AUC $.49$).
+The change 20 ticks earlier is an event-level signal (AUC $.61$, five of six
+windows) but is at chance at the run level ($.50$); it is a candidate timing
+signal, not a risk rating. The Physicist's apparent $.94$ is a between-window
+volatility relation, the Mathematician's $.70$ is trust-structure persistence,
+and the Mystic's sentiment is a placebo whose sign flips. A useful observer
+dashboard should expose these as separate sensors and should never collapse them
+into one ``risk'' number.
+
 The imitation network adds a social-layer result. Transmission is diffuse: all
 sixteen agents teach and learn, effective teacher concentration is low, and the
 fitness gap is small. The town's geography matters: the Guild Hall, cafe, square,
@@ -830,8 +965,13 @@ than learning-only.
   \item \textbf{Multiple comparisons.} The held-out tests are reported raw; the
   strong behavioural effects survive Holm correction, but the small performance
   differences should not be over-interpreted.
+  \item \textbf{Post-hoc target map and modest lead.} The target-specific map was
+  motivated by the discovery-window field scan; the held-out tests are temporal
+  out-of-sample, not pre-registered. The $\Delta$flow lead is event-level, has one
+  window exception (W4), and is at chance at the run level. It is a candidate for
+  a pre-registered intervention, not a validated early-warning system.
   \item \textbf{Outcome definitions.} The run-level AUC uses one maximum future
-  drawdown per run; the event-level AUC uses overlapping 20-tick windows. Both
+  drawdown per run; the event-level AUC uses report-level 20-tick windows. Both
   answer useful questions but neither is a full early-warning evaluation with
   lead-time constraints.
   \item \textbf{No financial claim.} This is a simulation, not investment advice,
@@ -849,13 +989,17 @@ two, but it does not deliver a robust return or drawdown advantage; the agents
 are cash-heavy and the discovery-window risk reduction is mostly exposure. The
 learning--imitation phase map shows that coordination rises monotonically with
 imitation while performance peaks at moderate imitation. The observer audit shows
-that a flow-based score can predict coordination in and out of sample while
-failing as a drawdown warning; its discovery-window drawdown signal reverses out
-of sample, and polarization's sign is unstable. Agent-based market simulations
-are most useful as behavioural laboratories when they report coordination and
-diversity explicitly, freeze and validate their data, hold out whole market
-windows, and evaluate observer scalars against the outcome they claim to predict
-at both run and event levels.
+that the flow \emph{level} predicts coordination in and out of sample but fails
+as a drawdown warning; its discovery-window drawdown signal reverses out of
+sample, and polarization's sign is unstable. A target-specific follow-up shows
+that the observers are separate sensors---between-window volatility, trust
+structure, coordination, and a placebo---and that the flow \emph{change} 20 ticks
+earlier has a modest event-level lead (AUC $.61$, five of six windows) with no
+run-level signal. Agent-based market simulations are most useful as behavioural
+laboratories when they report coordination and diversity explicitly, freeze and
+validate their data, hold out whole market windows, and evaluate observer
+scalars---levels and changes separately---against the outcome they claim to
+predict at both run and event levels.
 
 \section*{Data and code availability}
 
@@ -877,6 +1021,7 @@ python experiments/run_experiment.py --design sweep --ticks 250 \
 python experiments/analyze_results.py
 python experiments/analyze_extensions.py
 python experiments/analyze_strategy.py
+python experiments/analyze_observer_targets.py
 python -m unittest discover -s tests -v
 \end{verbatim}
 

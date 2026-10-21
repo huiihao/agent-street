@@ -114,8 +114,15 @@ flow-based score predicts future *coordination* both in and out of sample
 (ρ ≈ .59–.60 on held-out windows), but its discovery-window drawdown signal
 (ρ = .61; run-level AUC .81) reverses out of sample (ρ = −.04; AUC .44), and the
 event-level AUC is only .53. Polarization’s sign flips across windows. The flow
-score is therefore a **coordination-persistence signal, not a validated crash
-warning**; the app labels it *flow-alignment risk*.
+**level** is therefore a **coordination-persistence signal, not a validated
+crash warning**; the app labels it *flow-alignment risk*.
+
+A target-specific follow-up separates the four observers into different sensors:
+the Physicist is a between-window volatility descriptor, the Mathematician tracks
+trust structure, the Social Engineer’s flow level ranks runs but not events, and
+the Mystic behaves as a placebo. The flow **change** 20 ticks before a drawdown
+has a modest event-level AUC of **.61** (five of six held-out windows) but no
+run-level signal; it is a candidate timing signal, not a validated warning.
 
 ---
 
@@ -654,6 +661,7 @@ agent-street/
 │   ├── analyze_results.py       # discovery statistics + figures
 │   ├── analyze_extensions.py    # multi-window, phase map, OOS observer audit
 │   ├── analyze_strategy.py      # genome divergence + guild lineage
+│   ├── analyze_observer_targets.py  # observer x target map + delta-flow event study
 │   └── REPORT.md
 ├── paper/
 │   ├── main.tex                 # arXiv-style manuscript

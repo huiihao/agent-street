@@ -26,3 +26,7 @@ experiments/results_sweep/imitation_events.csv
 experiments/results_sweep/trust_edges.csv
 experiments/results/quick2/
 experiments/results/repro_check/
+
+# Regenerable observer-target observation dumps (derived tables are committed)
+experiments/results/tables/observer_target_observations.csv
+experiments/results/tables/delta_flow_observations.csv

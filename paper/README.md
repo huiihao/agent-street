@@ -7,7 +7,7 @@ multi-window experiments in `../experiments/`.
 
 - `main.tex` — manuscript
 - `refs.bib` — bibliography
-- `figures/` — eight figures (PDF, plus the system screenshot PNG)
+- `figures/` — nine figures (PDF, plus the system screenshot PNG)
 
 ## Compile
 
@@ -35,7 +35,7 @@ The manuscript was authored without a local TeX installation in this
 environment, so please run one compile pass and fix any local package or font
 issue before uploading. The LaTeX structure, labels, citations, and figure
 paths have been checked; all cited keys exist and all figure files are present.
-All eight figures exist as both PDF and PNG in `figures/`; the manuscript uses
+All nine figures exist as both PDF and PNG in `figures/`; the manuscript uses
 the PDFs except for the system screenshot.
 
 ## Before submitting to arXiv
@@ -91,6 +91,7 @@ python experiments/run_experiment.py --design sweep --ticks 250 \
 python experiments/analyze_results.py
 python experiments/analyze_extensions.py
 python experiments/analyze_strategy.py
+python experiments/analyze_observer_targets.py
 python -m unittest discover -s tests -v
 ```
 
@@ -106,8 +107,12 @@ window shows learning improving returns/drawdowns and imitation coordinating;
 the six held-out windows show that only the behavioural effects replicate.
 Learning robustly increases diversity and signal-genome divergence; imitation
 robustly increases order-flow coordination; the full-minus-static return and
-drawdown advantages do not replicate. The v2 flow-risk score is a
+drawdown advantages do not replicate. The v2 flow-risk *level* is a
 coordination-persistence signal, not a validated drawdown warning: it predicts
 future synchrony/imbalance in and out of sample, but its discovery-window
-drawdown correlation reverses out of sample. The paper says this explicitly in
-the abstract, results, observer audit, discussion, and limitations.
+drawdown correlation reverses out of sample. The target-specific follow-up shows
+that the observers are different sensors (between-window volatility, trust
+structure, coordination, placebo); the flow *change* 20 ticks earlier has a
+modest event-level AUC of .61 (five of six windows) but no run-level signal. The
+paper says this explicitly in the abstract, results, observer audit, discussion,
+and limitations.
