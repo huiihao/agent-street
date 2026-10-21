@@ -1,0 +1,78 @@
+{
+  "snapshot_file": "D:/Mimic_Stock_Market/experiments/data/windows/w1_2026_08_24/market_snapshot_5m_5d.json",
+  "sha256": "0dc3b76cc1b158c03592e94806a9104ef93b0acd4e7b527505b4c97a22f21314",
+  "source": "yfinance:w1_2026_08_24",
+  "interval": "5m",
+  "days_back": 5,
+  "bars": 390,
+  "first_utc": "2026-08-24T13:30:00+00:00",
+  "last_utc": "2026-08-28T19:55:00+00:00",
+  "sessions": [
+    "2026-08-24",
+    "2026-08-25",
+    "2026-08-26",
+    "2026-08-27",
+    "2026-08-28"
+  ],
+  "equal_weight_return": 0.018890513951804744,
+  "equal_weight_max_drawdown": -0.016227242341655845,
+  "equal_weight_annualized_vol": 0.14888918009070648,
+  "per_symbol_return": {
+    "AAPL": 0.029469627691235845,
+    "GOOGL": -0.003766479830032421,
+    "MSFT": 0.06205008854130689,
+    "TSLA": -0.018351691725044583,
+    "AMZN": 0.025051025081557876
+  },
+  "validation": {
+    "bars": 390,
+    "sessions": [
+      "2026-08-24",
+      "2026-08-25",
+      "2026-08-26",
+      "2026-08-27",
+      "2026-08-28"
+    ],
+    "symbols": [
+      "AAPL",
+      "GOOGL",
+      "MSFT",
+      "TSLA",
+      "AMZN"
+    ],
+    "aligned_lengths": {
+      "AAPL": 390,
+      "GOOGL": 390,
+      "MSFT": 390,
+      "TSLA": 390,
+      "AMZN": 390
+    },
+    "monotonic_timestamps": true,
+    "duplicate_timestamps": 0,
+    "nonpositive_prices": 0,
+    "ohlc_inconsistencies": 0,
+    "negative_volumes": 0
+  },
+  "crosscheck": {
+    "AAPL": {
+      "common_bars": 390,
+      "max_relative_difference": 0.0
+    },
+    "GOOGL": {
+      "common_bars": 390,
+      "max_relative_difference": 0.0
+    },
+    "MSFT": {
+      "common_bars": 390,
+      "max_relative_difference": 0.0
+    },
+    "TSLA": {
+      "common_bars": 390,
+      "max_relative_difference": 0.0
+    },
+    "AMZN": {
+      "common_bars": 390,
+      "max_relative_difference": 0.0
+    }
+  }
+}

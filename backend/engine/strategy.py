@@ -115,16 +115,29 @@ def genome_from_persona(traits, params) -> StrategyGenome:
 
 
 class StrategyEngine:
-    def __init__(self, initial_cash: float = 10_000.0):
+    def __init__(
+        self,
+        initial_cash: float = 10_000.0,
+        learning_rate: float = 0.10,
+        learning_scale: float = 1.0,
+        imitation_scale: float = 1.0,
+        mutation_scale: float = 1.0,
+    ):
         self.initial_cash = initial_cash
+        self.learning_rate = max(0.0, float(learning_rate))
+        self.learning_scale = max(0.0, float(learning_scale))
+        self.imitation_scale = max(0.0, float(imitation_scale))
+        self.mutation_scale = max(0.0, float(mutation_scale))
         self.genomes: dict[str, StrategyGenome] = {}
         self.adaptations: deque[dict] = deque(maxlen=48)
+        self.imitation_events: list[dict] = []
         self.total_adaptations = 0
         self.closed_trades = 0
 
     def reset(self) -> None:
         self.genomes.clear()
         self.adaptations.clear()
+        self.imitation_events.clear()
         self.total_adaptations = 0
         self.closed_trades = 0
 
@@ -163,7 +176,7 @@ class StrategyEngine:
 
             if update_weights:
                 boosted = locations.get(event.persona_id) == "lab"
-                lr = 0.10 * (1.7 if boosted else 1.0)
+                lr = self.learning_rate * self.learning_scale * (1.7 if boosted else 1.0)
 
                 # Reward-modulated Hebbian update: a signal that supported a
                 # winning long is reinforced; a signal that supported a loser is
@@ -226,14 +239,19 @@ class StrategyEngine:
             teacher_g = self.genomes[teacher]
             learner_g = self.genomes[learner]
             trust = trust_network.get_trust(learner, teacher) if trust_network else 0.1
-            probability = 0.14 + 0.22 * trust
+            base_probability = 0.14 + 0.22 * trust
             if location == "lab":
-                probability += 0.18
+                base_probability += 0.18
             elif location == "hall":
-                probability += 0.06
-            if random.random() > min(0.62, probability):
+                base_probability += 0.06
+            probability = base_probability * self.imitation_scale
+            if random.random() > min(0.95, probability):
                 continue
 
+            learner_family_before = learner_g.family
+            teacher_family = teacher_g.family
+            learner_fitness = learner_g.fitness
+            teacher_fitness = teacher_g.fitness
             for gene in SIGNAL_GENES:
                 blended = 0.76 * getattr(learner_g, gene) + 0.24 * getattr(teacher_g, gene)
                 learner_g.set_signal(gene, blended + random.gauss(0.0, 0.010))
@@ -251,12 +269,27 @@ class StrategyEngine:
                 tick, learner, learner_g, "imitate",
                 f"learned {teacher}'s {teacher_g.family} playbook",
             )
+            self.imitation_events.append({
+                "tick": tick,
+                "learner": learner,
+                "teacher": teacher,
+                "location": location or "street",
+                "trust": round(trust, 4),
+                "learnerFitness": round(learner_fitness, 6),
+                "teacherFitness": round(teacher_fitness, 6),
+                "learnerFamilyBefore": learner_family_before,
+                "learnerFamilyAfter": learner_g.family,
+                "teacherFamily": teacher_family,
+            })
+            if len(self.imitation_events) > 2000:
+                self.imitation_events.pop(0)
 
     # ── exploration ──────────────────────────────────────────
 
     def mutate(self, tick: int) -> None:
+        mutation_probability = min(0.80, 0.10 * self.mutation_scale)
         for persona_id, genome in self.genomes.items():
-            if random.random() > 0.10:
+            if random.random() > mutation_probability:
                 continue
             if random.random() < 0.72:
                 gene = random.choice(SIGNAL_GENES)

@@ -1,0 +1,5 @@
+condition,agents,switched,switch_rate,mean_switches
+full,256,51,0.1992,0.7188
+imitation_only,256,27,0.1055,0.2148
+no_imitation,256,41,0.1602,0.4766
+static,256,0,0.0,0.0

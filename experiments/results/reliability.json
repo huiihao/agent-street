@@ -6,6 +6,7 @@
   "all_trades_valid": true,
   "all_tick_metrics_finite": true,
   "total_invariant_failures": 0,
+  "total_imitation_events": 1181,
   "min_agents": 16,
   "min_observers": 4,
   "runs_detail": [
@@ -22,6 +23,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 571,
+      "imitation_events": 42,
       "final_bar_index": 329
     },
     {
@@ -37,6 +39,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 587,
+      "imitation_events": 40,
       "final_bar_index": 329
     },
     {
@@ -52,6 +55,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 615,
+      "imitation_events": 34,
       "final_bar_index": 329
     },
     {
@@ -67,6 +71,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 565,
+      "imitation_events": 37,
       "final_bar_index": 329
     },
     {
@@ -82,6 +87,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 550,
+      "imitation_events": 33,
       "final_bar_index": 329
     },
     {
@@ -97,6 +103,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 534,
+      "imitation_events": 35,
       "final_bar_index": 329
     },
     {
@@ -112,6 +119,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 543,
+      "imitation_events": 39,
       "final_bar_index": 329
     },
     {
@@ -127,6 +135,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 570,
+      "imitation_events": 40,
       "final_bar_index": 329
     },
     {
@@ -142,6 +151,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 544,
+      "imitation_events": 32,
       "final_bar_index": 329
     },
     {
@@ -157,6 +167,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 593,
+      "imitation_events": 35,
       "final_bar_index": 329
     },
     {
@@ -172,6 +183,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 527,
+      "imitation_events": 39,
       "final_bar_index": 329
     },
     {
@@ -187,6 +199,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 556,
+      "imitation_events": 41,
       "final_bar_index": 329
     },
     {
@@ -202,6 +215,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 577,
+      "imitation_events": 44,
       "final_bar_index": 329
     },
     {
@@ -217,6 +231,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 594,
+      "imitation_events": 43,
       "final_bar_index": 329
     },
     {
@@ -232,6 +247,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 631,
+      "imitation_events": 30,
       "final_bar_index": 329
     },
     {
@@ -247,6 +263,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 568,
+      "imitation_events": 32,
       "final_bar_index": 329
     },
     {
@@ -262,6 +279,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 596,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -277,6 +295,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 636,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -292,6 +311,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 628,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -307,6 +327,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 598,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -322,6 +343,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 599,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -337,6 +359,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 577,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -352,6 +375,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 622,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -367,6 +391,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 572,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -382,6 +407,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 642,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -397,6 +423,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 608,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -412,6 +439,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 639,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -427,6 +455,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 611,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -442,6 +471,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 622,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -457,6 +487,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 623,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -472,6 +503,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 613,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -487,6 +519,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 614,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -502,6 +535,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 532,
+      "imitation_events": 42,
       "final_bar_index": 329
     },
     {
@@ -517,6 +551,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 527,
+      "imitation_events": 39,
       "final_bar_index": 329
     },
     {
@@ -532,6 +567,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 538,
+      "imitation_events": 36,
       "final_bar_index": 329
     },
     {
@@ -547,6 +583,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 514,
+      "imitation_events": 40,
       "final_bar_index": 329
     },
     {
@@ -562,6 +599,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 516,
+      "imitation_events": 31,
       "final_bar_index": 329
     },
     {
@@ -577,6 +615,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 548,
+      "imitation_events": 39,
       "final_bar_index": 329
     },
     {
@@ -592,6 +631,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 512,
+      "imitation_events": 41,
       "final_bar_index": 329
     },
     {
@@ -607,6 +647,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 546,
+      "imitation_events": 31,
       "final_bar_index": 329
     },
     {
@@ -622,6 +663,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 533,
+      "imitation_events": 28,
       "final_bar_index": 329
     },
     {
@@ -637,6 +679,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 527,
+      "imitation_events": 41,
       "final_bar_index": 329
     },
     {
@@ -652,6 +695,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 516,
+      "imitation_events": 35,
       "final_bar_index": 329
     },
     {
@@ -667,6 +711,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 517,
+      "imitation_events": 29,
       "final_bar_index": 329
     },
     {
@@ -682,6 +727,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 534,
+      "imitation_events": 37,
       "final_bar_index": 329
     },
     {
@@ -697,6 +743,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 512,
+      "imitation_events": 50,
       "final_bar_index": 329
     },
     {
@@ -712,6 +759,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 524,
+      "imitation_events": 35,
       "final_bar_index": 329
     },
     {
@@ -727,6 +775,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 527,
+      "imitation_events": 31,
       "final_bar_index": 329
     },
     {
@@ -742,6 +791,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -757,6 +807,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -772,6 +823,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -787,6 +839,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -802,6 +855,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -817,6 +871,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -832,6 +887,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -847,6 +903,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -862,6 +919,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -877,6 +935,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -892,6 +951,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -907,6 +967,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -922,6 +983,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -937,6 +999,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -952,6 +1015,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     },
     {
@@ -967,6 +1031,7 @@
       "agents": 16,
       "observers": 4,
       "closed_trades": 0,
+      "imitation_events": 0,
       "final_bar_index": 329
     }
   ]

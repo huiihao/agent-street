@@ -343,7 +343,7 @@ class ObserverEngine:
         titles = [
             "Field Notes on Narrative Capture",
             "A Social Topology of the Trading Floor",
-            "On Echo Chambers, Brokers and Cascade Risk",
+            "On Echo Chambers, Brokers and Flow Alignment",
             "The Social Engineering of Consensus",
             "Trust Density and the Coordination Problem",
         ]
@@ -364,7 +364,7 @@ class ObserverEngine:
                 f"({buy_agents} buyers / {sell_agents} sellers); "
                 f"flow-risk score {flow_risk_score:.2f}. "
                 f"Cross-sectional dispersion {metrics.dispersion:.4f}; crowd field {sentiment:+.2f}. "
-                f"Cascade risk: {cascade}. Recommended intervention: {intervention}."
+                f"Flow-alignment risk: {cascade}. Recommended intervention: {intervention}."
             ),
             confidence=confidence,
             data={

@@ -1,0 +1,58 @@
+{
+  "started_at": "2026-10-21T01:45:06.911273+00:00",
+  "design": "base",
+  "ticks": 300,
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "conditions": {
+    "full": {
+      "enable_learning": true,
+      "enable_imitation": true,
+      "enable_mutation": true,
+      "learning_scale": 1.0,
+      "imitation_scale": 1.0,
+      "mutation_scale": 1.0
+    },
+    "no_imitation": {
+      "enable_learning": true,
+      "enable_imitation": false,
+      "enable_mutation": true,
+      "learning_scale": 1.0,
+      "imitation_scale": 0.0,
+      "mutation_scale": 1.0
+    },
+    "imitation_only": {
+      "enable_learning": false,
+      "enable_imitation": true,
+      "enable_mutation": true,
+      "learning_scale": 0.0,
+      "imitation_scale": 1.0,
+      "mutation_scale": 1.0
+    },
+    "static": {
+      "enable_learning": false,
+      "enable_imitation": false,
+      "enable_mutation": false,
+      "learning_scale": 0.0,
+      "imitation_scale": 0.0,
+      "mutation_scale": 0.0
+    }
+  },
+  "snapshot_path": "experiments\\data\\windows\\w3_2026_09_14\\market_snapshot_5m_5d.json",
+  "snapshot_sha256": "6b67ef52230a3899353cd1486ac89a5c33d76bb78cddd5e5ff53e6de9c16bd6e",
+  "snapshot_source": "yfinance:w3_2026_09_14",
+  "snapshot_bars": 390,
+  "snapshot_first_utc": "2026-09-14T13:30:00+00:00",
+  "snapshot_last_utc": "2026-09-18T19:55:00+00:00",
+  "finished_at": "2026-10-21T01:45:30.420939+00:00",
+  "elapsed_sec": 23.51,
+  "runs_completed": 32
+}

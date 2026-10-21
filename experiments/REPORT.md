@@ -1,393 +1,492 @@
-# Learning, Imitation, and Observer Validity in Agent Street
+# Learning to Diverge, Imitating to Coordinate
 
-### A reproducible ablation study on a frozen real-market replay
+### A multi-window replication and observer audit of an agent-based market
 
 **Code and data:** <https://github.com/huiihao/agent-street>  
-**Snapshot SHA-256:** `3c9cf0ff864b68e6886c1f3181f67e6e93dbacef8102007c34fedc768c9f86fe`
+**Discovery snapshot SHA-256:** `3c9cf0ff864b68e6886c1f3181f67e6e93dbacef8102007c34fedc768c9f86fe`  
+**Paper:** [`../paper/main.tex`](../paper/main.tex)
 
 ---
 
 ## Abstract
 
-We study an agent-based market simulation in which sixteen MBTI-flavoured traders evolve
-interpretable strategy genomes through reward learning, imitation, and mutation, while four
-observer agents publish structured reports. Using a frozen five-day, five-minute yfinance
-snapshot and a four-condition × sixteen-seed ablation (64 runs, 300 ticks each), we find that
-**reward learning reduces trade synchrony and order-flow imbalance, lowers cross-sectional
-return dispersion, increases strategy diversity, and improves returns and drawdowns relative
-to fixed priors**. **Imitation increases coordination**: adding it to learning raises synchrony and
-worsens drawdown relative to learning alone without a significant return gain, while
-imitation alone improves returns relative to static priors but does not improve drawdown
-or strategy diversity. The population's guild composition shifts from a
-momentum/contrarian split toward a broader ecology that includes mean-reversion and
-sentiment strategies.
+We study whether a population of evolving agents learns from its own trading experience and
+from others, and whether observer agents can turn the resulting collective state into a useful
+risk signal. Agent Street combines a validated five-symbol, five-minute market replay with
+sixteen MBTI-flavoured traders whose strategy genomes adapt through reward-modulated learning,
+trust-gated imitation, and mutation, plus four observers.
 
-We then audit the observer agents. The original composite cascade-risk score is **not
-predictive** of future synchrony, imbalance, or drawdown, and its polarization term points in
-the opposite direction from its risk label: polarization behaves as a disagreement buffer.
-A revised, order-flow-based observer score predicts future synchrony (Spearman ρ = 0.75),
-absolute order imbalance (ρ = 0.77), and future drawdown magnitude (ρ = 0.61) at the run
-level. The snapshot is validated against the source endpoint with exact bar-level agreement,
-21 unit tests pass, and all 64 runs satisfy the wealth invariant. We discuss the tension
-between individual learning and social imitation, the need to validate observer metrics
-component-wise, and the limits of a single-market-regime study.
+We use one discovery window and six held-out windows spanning up-, down-, and high-volatility
+conditions, four mechanism conditions, 256 base runs, and a 128-run learning × imitation sweep.
+The data are frozen and exhaustively validated; all 384 runs satisfy the accounting invariant.
+
+The discovery window reproduces a familiar story: relative to static priors, learning improves
+returns and drawdowns and de-synchronizes trading, whereas imitation coordinates. The held-out
+windows separate robust from fragile claims. **Learning robustly increases strategy diversity
+and signal-genome divergence** (final pairwise distance 0.320 vs. 0.157 for static; diversity
++0.107), and **imitation robustly increases order-flow coordination** (synchrony +0.020,
+|imbalance| +0.041; 90–98% of paired observations). The discovery-window performance advantage
+**does not replicate**: full minus static returns are −0.019 percentage points (p = .56) and
+drawdowns are 0.034 pp larger (p = .15), while learning-only is 0.056 pp worse (p = .005).
+Agents hold only about 32% exposure, and an equal-weight market benchmark explains most of the
+variation; there is no alpha claim.
+
+A learning × imitation phase map shows that coordination rises monotonically with imitation,
+while return and drawdown are best at moderate imitation (1× learning, 0.5× imitation) and
+deteriorate at high imitation.
+
+The observer audit is similarly cautionary. The original composite cascade score is
+uninformative; a flow-based score predicts future coordination both in and out of sample
+(ρ = .59–.60), but its discovery-window drawdown signal (ρ = .61; run-level AUC .81) reverses
+out of sample (ρ = −.04; AUC .44), and an event-level AUC is only .53. Polarization's sign flips
+across windows. The robust results are behavioural — **learning diverges, imitation
+coordinates** — while single-window performance and observer-warning claims are fragile.
+Observer scores must be validated on the outcome they claim to predict, across held-out
+windows, at both run and event levels.
 
 ---
 
 ## 1. Objectives
 
-1. Does individual reward learning change strategy diversity and market behaviour?
-2. Does social imitation change coordination, guild composition, and performance?
-3. Are the observer agents' reports quantitatively valid and predictive?
-4. Are the data, accounting, and interaction mechanisms reliable enough to support the
+1. Does individual reward learning change strategy diversity, genome divergence, coordination,
+   and performance?
+2. Does social imitation change coordination, guild lineage, and performance?
+3. Do these behavioural effects replicate across independent market windows?
+4. Do the observer agents' structured metrics predict future coordination or drawdown, and do
+   those predictions survive out of sample?
+5. Are the data, accounting, and interaction mechanisms reliable enough to support the
    conclusions?
 
 The experiment is deliberately **not** a claim about real-world alpha. The House market maker
-pins the town price to the replay price, so agent behaviour cannot alter market returns; this
-isolates the behavioural and accounting effects of learning and imitation.
+pins the town price to the replay price, agents are long-only and cash-heavy, and the market
+path is exogenous. The design isolates behavioural and accounting effects.
 
 ---
 
 ## 2. System under test
 
-Agent Street is a reproducible agent-based market diorama:
-
-- **Market data**: one aligned, validated, cached bar timeline. The replay starts after 30
-  warm-up bars and advances one bar per tick.
+- **Market data**: a single aligned, validated, cached 5-minute bar timeline per window. The
+  replay starts after 30 warm-up bars and advances one bar per tick.
 - **Traders**: 16 agents with MBTI-derived priors. A strategy genome contains six signal
   weights (trend, reversion, RSI, herding, influence, memory; sum = 1) and four traits
-  (risk, patience, contrarian, noise).
+  (risk, patience, contrarian, noise). Decisions combine trend, mean reversion, RSI, herding,
+  social influence, and memory; risk controls include drawdown panic, stop loss, profit
+  taking, holding periods, position caps, and symbol cooldowns.
 - **Learning**: every buy carries its entry signal context. When a position closes, the
-  realised trade return produces a reward and the genome is updated:
-  `Δw_signal = η · reward · entry_signal`, with `reward = clip(trade_return / 2%, -1, 1)`.
-  Risk and patience are adapted; wins/losses and an EMA fitness are tracked.
+  realised return produces a reward and the genome is updated:
+  `Δw_signal = η · reward · entry_signal`, with
+  `reward = clip(trade_return / 2%, −1, 1)`. Risk and patience adapt; wins/losses and an EMA
+  fitness are tracked. The Quant Lab raises the learning rate (1.7×).
 - **Imitation**: after a conversation, a lower-fitness trader may copy a blend of a
-  higher-fitness playbook, gated by the trust graph. The Quant Lab raises the learning rate
-  (1.7×) and the Guild Hall slightly raises imitation probability.
+  higher-fitness playbook, gated by the trust graph. The Quant Lab slightly raises imitation
+  probability and the Guild Hall raises it through social co-location. Imitation is a
+  trust- and fitness-gated blend, not a global broadcast.
 - **Mutation**: every 20 ticks a small fraction of genomes explore a random variation.
 - **Matching**: limit checks, price/time priority, partial fills, direct crosses, and House
   absorption at real price ± half-spread. Fees are charged per side; buys capitalise fees
   into average cost; sells realise P&L; the wealth invariant is checked every 20 ticks.
+- **World**: 15 locations on a road grid, daily routines with BFS pathfinding, conversations
+  requiring co-location, and a trust network. The Guild Hall, Rumor Mill, and Quant Lab are
+  social hubs added for this study.
 - **Observers**: Physicist (order parameters, dispersion), Mathematician (trust graph,
-  partitions), Social Engineer (trust density, polarization, guilds, order flow, cascade
-  risk), Mystic (unvalidated colour). Reports are generated every 20 ticks.
+  partitions), Social Engineer (trust density, polarization, guilds, order flow, flow
+  alignment), Mystic (unvalidated colour). Reports are generated every 20 ticks and expose
+  structured metrics alongside prose. The experiments use the structured fields, not the
+  prose.
 - **UI**: a Three.js town, candles/compare/guilds views, Account/Strategy tabs, four observer
   cards, leaderboard and tape. The UI is not used in the experiment; the headless runner
   exercises the same engine.
 
+The two Social Engineer scores are:
+
+```
+v1 = 0.45·D + 0.35·P + 0.20·(1 − min(1, trustDensity/0.25))
+v2 = 0.55·S + 0.25·min(1, imitationRecent/3) + 0.20·D − 0.15·P
+```
+
+where `D` is dominant guild share, `P` polarization, `S` trade synchrony. v2 is fixed before
+the held-out evaluation; it is not re-fitted.
+
 ---
 
-## 3. Data provenance and reliability
+## 3. Data provenance
 
-### 3.1 Frozen snapshot
+Seven snapshots are frozen and used without network access. Each contains 390 aligned 5-minute
+bars for AAPL, GOOGL, MSFT, TSLA, and AMZN over five sessions. The first 30 bars are warm-up;
+the experiment then runs 300 ticks. The discovery window is 2026-10-13 to 2026-10-19; the six
+held-out windows are 2026-08-24 to 2026-10-09.
 
-| Property | Value |
-|---|---|
-| Source | yfinance (Yahoo) |
-| Snapshot file | `experiments/data/market_snapshot_5m_5d.json` |
-| SHA-256 | `3c9cf0ff864b68e6886c1f3181f67e6e93dbacef8102007c34fedc768c9f86fe` |
-| Interval | 5 minutes |
-| Symbols | AAPL, GOOGL, MSFT, TSLA, AMZN |
-| Aligned bars | 390 |
-| Sessions | 2026-10-13, 14, 15, 16, 19 (UTC dates) |
-| First / last bar | 2026-10-13T13:30Z / 2026-10-19T19:55Z |
-| Cache created | 2026-10-20T08:11:01Z |
+| Window | Dates (UTC) | Market return | Max DD | Volatility | Role |
+|---|---|---:|---:|---:|---|
+| Discovery | 2026-10-13 to 2026-10-19 | −1.40% | 4.20% | 18.6% | Discovery |
+| W1 | 2026-08-24 to 2026-08-28 | +1.46% | 1.59% | 15.4% | Held out |
+| W2 | 2026-08-31 to 2026-09-04 | −0.90% | 3.20% | 26.6% | Held out |
+| W3 | 2026-09-14 to 2026-09-18 | +0.14% | 2.74% | 20.2% | Held out |
+| W4 | 2026-09-21 to 2026-09-25 | −0.66% | 2.90% | 14.3% | Held out |
+| W5 | 2026-09-28 to 2026-10-02 | +1.06% | 1.86% | 23.2% | Held out |
+| W6 | 2026-10-05 to 2026-10-09 | +1.97% | 1.33% | 14.1% | Held out |
 
-Validation on the snapshot:
+Returns, drawdowns, and volatilities are computed over the 300-tick experiment segment
+(bars 30–329); volatility is annualised from the equal-weight market return. Every snapshot
+has five sessions, five symbols, and 390 aligned bars. All 35 symbol-windows were re-fetched
+from the Yahoo chart endpoint; every overlapping close matched exactly (maximum relative
+difference 0.0). Each snapshot has a SHA-256 in its `snapshot_metadata.json`.
 
-- 390 aligned bars for every symbol;
-- timestamps strictly monotonic, zero duplicates;
-- zero non-positive prices, zero OHLC inconsistencies, zero negative volumes;
-- one timestamp intersection index shared by all symbols.
-
-### 3.2 Independent endpoint cross-check
-
-Immediately after freezing, every symbol was re-fetched from the Yahoo chart endpoint for the
-same window. All 390 overlapping bars matched exactly:
-
-| Symbol | Common bars | Missing in remote | Extra remote | Max relative close difference |
-|---|---:|---:|---:|---:|
-| AAPL | 390 | 0 | 1 (post-snapshot) | 0.0 |
-| GOOGL | 390 | 0 | 1 | 0.0 |
-| MSFT | 390 | 0 | 1 | 0.0 |
-| TSLA | 390 | 0 | 1 | 0.0 |
-| AMZN | 390 | 0 | 1 | 0.0 |
-
-The cross-check uses the same Yahoo upstream as yfinance; it verifies that the frozen snapshot
-was not corrupted between fetch and experiment, not that Yahoo is an independent price source.
-No independent intraday vendor was available for this study.
-
-### 3.3 Execution reliability
-
-- No network access during a run: the provider loads the frozen snapshot.
-- LLM disabled; all behaviour is rule-based and deterministic under a seed.
-- 21 unit tests cover bar cleaning/alignment, cache, indicators, matching, fees, partial
-  fills, average cost, realised P&L, close events, win rate, wealth conservation, and strategy
-  updates.
-- 64 experiment runs × 300 ticks:
-  - **0 wealth-invariant failures**;
-  - all strategy signal weights sum to 1 within 1e-6;
-  - all sampled trust edges are symmetric;
-  - all conversation participants are valid traders;
-  - all trades have positive shares and prices;
-  - all recorded tick metrics are finite;
-  - exactly 16 traders and 4 observers per frame.
-- Determinism check: changing the observer's report logic (v1 → v2) left every agent-level
-  metric bit-identical across all 64 runs; observers do not feed back into trading.
+The discovery window is the only window used to motivate the mechanisms and the v2 observer.
+The six held-out windows are not used to fit the strategies, the phase map, or v2. They span a
+strong up week (W6), a down/high-volatility week (W2), and mixed conditions.
 
 ---
 
 ## 4. Experimental design
 
-### 4.1 Conditions
+### Conditions
 
-| Condition | P&L weight learning | Imitation | Mutation | Purpose |
-|---|:---:|:---:|:---:|---|
-| Static priors | ✗ | ✗ | ✗ | Control: fixed MBTI genome |
-| Imitation only | ✗ | ✓ | ✓ | Imitation without individual weight learning; fitness is still tracked from closes |
-| Learning only | ✓ | ✗ | ✓ | Individual learning without social transmission |
-| Full | ✓ | ✓ | ✓ | Complete system |
-
-### 4.2 Protocol
-
-- **Seeds**: 1–16 per condition (64 runs).
-- **Horizon**: 300 ticks per run; the replay starts at bar 30 and does not loop.
-- **Market path**: identical frozen bars for all runs; only agent decisions differ.
-- **Metrics per tick**: aggregate return, fees, order flow (buy/sell shares and agents),
-  trade synchrony, absolute order imbalance, strategy diversity, guild counts, generation,
-  adaptations, trust density, observer reports and structured observer data.
-- **End of run**: per-agent genome, generation, fitness, equity, realised/unrealised P&L,
-  max drawdown, win rate, closed trades, positions.
-- **Statistics**: paired Wilcoxon signed-rank tests blocked by seed; Holm correction within
-  the six primary outcomes for each contrast; paired bootstrap (5,000 resamples) for mean
-  differences; rank-biserial effect sizes. Observer predictive tests use run-level Spearman
-  correlations with 5,000 run-cluster bootstrap resamples (report-level correlations are
-  reported as a secondary view).
-- **Primary outcomes**: aggregate return, max drawdown magnitude, strategy diversity,
-  cross-sectional return SD, trade synchrony, absolute order imbalance.
-- **Manipulation check**: strategy generation and adaptation count.
-
-### 4.3 Definitions
-
-- **Trade synchrony** at tick `t`: `max(#buy agents, #sell agents) / #trading agents`.
-  Values near 1 mean the active traders are on one side.
-- **Absolute order imbalance**: `|buy shares − sell shares| / (buy shares + sell shares)`.
-- **Strategy diversity**: `1 − Σ (guild_count / 16)²`.
-- **Max drawdown**: the most negative peak-to-trough equity drawdown over the run; we report
-  its magnitude.
-- **Future drawdown magnitude**: over the 20 ticks after an observer report, the absolute
-  value of the minimum aggregate equity change relative to the report tick.
-- **Observer run-level correlation**: each run's mean observer score and mean future outcome
-  are computed first; the correlation is across 64 runs. This avoids pseudo-replication from
-  overlapping 20-tick windows.
-
----
-
-## 5. Results
-
-### 5.1 Manipulation check
-
-| Condition | Strategy generation (mean ± SD) | Adaptations (mean ± SD) |
-|---|---:|---:|
-| Static priors | 0.00 ± 0.00 | 0.0 ± 0.0 |
-| Imitation only | 8.75 ± 1.81 | 36.8 ± 5.7 |
-| Learning only | 78.25 ± 5.39 | 612.6 ± 20.5 |
-| Full | 75.69 ± 7.78 | 607.8 ± 28.5 |
-
-The conditions behave as intended. Learning produces many more updates than imitation alone;
-mutation contributes a small number of exploration events.
-
-### 5.2 Primary outcomes
-
-| Condition | Aggregate return (%) | Max DD (%) | Strategy diversity | Return SD (%) | Trade synchrony | \|Order imbalance\| |
-|---|---:|---:|---:|---:|---:|---:|
-| Static priors | −0.302 ± 0.053 | 1.642 ± 0.074 | 0.555 ± 0.000 | 0.671 ± 0.098 | 0.856 ± 0.011 | 0.756 ± 0.019 |
-| Imitation only | −0.252 ± 0.056 | 1.651 ± 0.056 | 0.553 ± 0.055 | 0.529 ± 0.077 | 0.875 ± 0.014 | 0.798 ± 0.020 |
-| Learning only | −0.237 ± 0.084 | 1.479 ± 0.071 | 0.615 ± 0.045 | 0.519 ± 0.086 | 0.794 ± 0.013 | 0.642 ± 0.026 |
-| Full | −0.192 ± 0.082 | 1.558 ± 0.084 | 0.624 ± 0.062 | 0.488 ± 0.079 | 0.834 ± 0.017 | 0.713 ± 0.035 |
-
-![Dynamics](figures/fig_dynamics.png)
-
-*Figure 1. Twenty-tick rolling means with 95% confidence intervals across 16 seeds.
-Learning raises strategy diversity and generation and reduces synchrony; imitation alone
-raises synchrony and leaves diversity near the static baseline.*
-
-![Primary outcomes](figures/fig_primary.png)
-
-*Figure 2. Primary outcomes by condition. Points are individual seeds.*
-
-### 5.3 Paired contrasts
-
-Mean difference `[95% bootstrap CI]`, with Holm-adjusted p for the six primary outcomes.
-
-| Outcome | Full − Static | Learning − Static | Imitation − Static | Full − Learning |
+| Condition | P&L learning | Imitation | Mutation | Purpose |
 |---|---|---|---|---|
-| Aggregate return (pp) | **+0.110 [0.062, 0.166]**, p=.003 | **+0.065 [0.022, 0.104]**, p=.018 | **+0.050 [0.017, 0.087]**, p=.032 | +0.045 [0.002, 0.090], p=.536 |
-| Max DD magnitude (pp) | **−0.084 [−0.133, −0.032]**, p=.008 | **−0.163 [−0.204, −0.118]**, p<.001 | +0.009 [−0.022, 0.039], p=.751 | **+0.079 [0.035, 0.125]**, p=.021 |
-| Strategy diversity | **+0.069 [0.038, 0.097]**, p=.008 | **+0.060 [0.039, 0.081]**, p=.004 | −0.002 [−0.029, 0.023], p=1.0 | +0.009 [−0.027, 0.045], p=.842 |
-| Return SD (pp) | **−0.183 [−0.245, −0.118]**, p=.002 | **−0.151 [−0.216, −0.092]**, p=.002 | **−0.141 [−0.207, −0.075]**, p=.005 | −0.032 [−0.077, 0.010], p=.645 |
-| Trade synchrony | **−0.022 [−0.032, −0.012]**, p=.004 | **−0.061 [−0.071, −0.051]**, p<.001 | **+0.020 [0.012, 0.028]**, p<.001 | **+0.040 [0.031, 0.049]**, p<.001 |
-| \|Order imbalance\| | **−0.043 [−0.062, −0.024]**, p=.003 | **−0.114 [−0.132, −0.095]**, p<.001 | **+0.041 [0.029, 0.054]**, p<.001 | **+0.071 [0.054, 0.089]**, p<.001 |
+| Static priors | no | no | no | Fixed MBTI genome (control) |
+| Imitation only | no | yes | yes | Social transmission without weight learning |
+| Learning only | yes | no | yes | Individual learning only |
+| Full | yes | yes | yes | Complete system |
 
-**Learning effects.** Relative to fixed priors, both learning conditions reduce trade
-synchrony and order-flow imbalance, increase strategy diversity, reduce cross-sectional
-return dispersion, and improve aggregate returns and drawdowns. These effects are
-statistically robust across seeds, although the economic magnitudes are small: the return
-difference is about 0.07–0.11 percentage points over the 300-tick window and the drawdown
-difference is 0.08–0.16 percentage points.
+### Runs
 
-**Imitation effects.** Adding imitation to learning raises synchrony and order-flow
-imbalance substantially, does not significantly improve aggregate return, and significantly
-worsens max drawdown relative to learning alone. Imitation alone raises synchrony and returns
-relative to static priors but does not improve drawdowns or diversify guild composition.
-The complete system has the best aggregate return but not the lowest coordination or
-drawdown; there is a real tension between social transmission and diversification.
+- **Discovery**: 4 conditions × 16 seeds × 300 ticks = 64 runs.
+- **Held-out**: 6 windows × 4 conditions × 8 seeds × 300 ticks = 192 runs.
+- **Phase sweep**: 4 learning scales (0, 0.5, 1, 2) × 4 imitation scales (0, 0.5, 1, 2) ×
+  8 seeds × 250 ticks = 128 runs. Mutation is fixed at 1×.
+- **Total**: 384 runs.
 
-### 5.4 Strategy guilds
+The market path is identical across conditions within a window; only agent decisions and
+interactions differ. LLM enrichment is disabled; experiments read no network.
 
-| Condition | Momentum | Mean reversion | Sentiment | Contrarian | Balanced |
-|---|---:|---:|---:|---:|---:|
-| Static priors | 8.000 | 0.000 | 0.000 | 7.000 | 1.000 |
-| Imitation only | 8.375 | 0.812 | 0.000 | 6.375 | 0.438 |
-| Learning only | 6.750 | 0.750 | 0.875 | 7.000 | 0.625 |
-| Full | 6.062 | 1.688 | 0.312 | 7.062 | 0.875 |
+### Outcomes
 
-![Guild composition](figures/fig_guilds.png)
+Primary: aggregate return, max drawdown magnitude, strategy diversity (1 − HHI of guild
+counts), cross-sectional return SD, trade synchrony (larger buy/sell agent count divided by
+trading agents), absolute order imbalance. Secondary: mean exposure, turnover, final
+signal-genome distance (mean pairwise Euclidean distance over the six normalized signal
+weights), guild switching, and observer metrics.
 
-*Figure 3. Mean guild composition. Learning creates mean-reversion and sentiment niches;
-imitation alone mostly reshuffles the existing momentum/contrarian/balanced split.*
+### Statistics
 
-![Strategy field](figures/fig_strategy_field.png)
+- Discovery: paired Wilcoxon signed-rank tests blocked by seed, Holm correction within the
+  six primary outcomes per contrast, paired bootstrap 95% CIs, rank-biserial effect sizes.
+- Held-out: the same paired differences over 48 seed-window pairs; CIs resample windows with
+  replacement (window-cluster bootstrap); p-values are raw because this is a planned
+  replication. Sign counts expose heterogeneity.
+- Observer: run-level Spearman correlations (one observation per run), 3,000 run-cluster
+  bootstrap resamples; report-level correlations as a secondary view; run-level and
+  event-level AUCs for high future |drawdown| (top quartile). Run-level AUC asks whether a
+  run is risky; event-level AUC asks whether a report is an early warning.
+- v2 is not re-fitted on held-out windows. The held-out evaluation is temporal and
+  formula-fixed, not a pre-registered random sample.
 
-*Figure 4. Final genomes (trend vs reversion weights) for the seed nearest the condition's
-median diversity. Static priors occupy two tight clusters; learning spreads the population
-into new regions; the full system combines spread with imitation-driven local clustering.*
+---
 
-### 5.5 Observer audit
+## 5. Reliability
 
-We compare the original Social Engineer composite score (v1: dominant share + polarization +
-low trust density) with a flow-based score (v2):
+| Check | Result |
+|---|---|
+| Snapshots | 7 × 390 aligned bars; 5 symbols; 5 sessions |
+| Endpoint cross-check | 35/35 symbol-windows exact; max relative difference 0.0 |
+| Base runs | 64 discovery + 192 held-out = 256 |
+| Phase sweep | 128 runs |
+| Wealth invariant | 0 failures across all 384 runs |
+| Genomes | all signal weights sum to 1 |
+| Trust | all sampled edges symmetric |
+| Conversations / trades | all participants valid; all shares and prices positive |
+| Metrics | all recorded values finite |
+| Agent-level observer feedback | v1→v2 change left every agent metric bit-identical |
+| Unit tests | 21 passing (data, indicators, matching, accounting, strategy) |
 
-```
-flow_risk = 0.55·trade_synchrony + 0.25·min(1, imitation_events/3)
-          + 0.20·dominant_share − 0.15·polarization
-```
+---
 
-The v2 observer report uses order-flow alignment, imitation, and polarization as a
-disagreement buffer. Both scores are evaluated against the **next 20 ticks** after each
-report; the primary analysis aggregates each run first (n=64).
+## 6. Results
 
-| Predictor | Future synchrony | Future \|order imbalance\| | Future \|drawdown\| |
+### 6.1 Discovery window: the familiar story
+
+| Condition | Return | Max DD | Diversity | Return SD | Synchrony | \|Imbalance\| | Exposure | Genome distance |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Static priors | −0.302% | 1.642% | 0.555 | 0.671 pp | 0.856 | 0.756 | 34.8% | 0.157 |
+| Imitation only | −0.252% | 1.651% | 0.553 | 0.529 pp | 0.875 | 0.798 | 35.6% | 0.118 |
+| Learning only | −0.237% | 1.479% | 0.615 | 0.519 pp | 0.794 | 0.642 | 32.6% | 0.320 |
+| Full | −0.192% | 1.558% | 0.624 | 0.488 pp | 0.834 | 0.713 | 34.4% | 0.254 |
+
+Relative to static priors, full improves return by +0.110 pp (Holm p = .003), reduces drawdown
+by 0.084 pp (p = .008), raises diversity by +0.069 (p = .008), lowers return SD by 0.183 pp
+(p = .002), and lowers synchrony by 0.022 (p = .004) and |imbalance| by 0.043 (p = .003).
+Learning-only shows a larger drawdown reduction (0.163 pp, p < .001) and synchrony reduction
+(0.061, p < .001). Imitation-only raises synchrony (+0.020) and imbalance (+0.041), improves
+return by +0.050 pp, but does not improve drawdown or diversity. Adding imitation to learning
+raises synchrony by +0.040 and imbalance by +0.071 (both p < .001), worsens drawdown by
+0.079 pp (p = .021), and does not significantly improve return (Holm p = .536).
+
+![Discovery dynamics](figures/fig_dynamics.png)
+
+### 6.2 Multi-window replication: what survives
+
+![Per-window effects](figures/fig_windows_forest.png)
+
+| Metric | Full − Static, discovery | Full − Static, held-out | Learning − Static, discovery | Learning − Static, held-out | Imitation − Static, discovery | Imitation − Static, held-out |
+|---|---:|---:|---:|---:|---:|---:|
+| Return (pp) | +0.110*** | −0.019 | +0.065* | −0.056** | +0.050* | −0.018 |
+| Drawdown improvement (pp) | +0.084** | −0.034 | +0.163*** | −0.028* | −0.009 | −0.061** |
+| Strategy diversity | +0.069** | +0.122*** | +0.060** | +0.107*** | −0.002 | −0.046*** |
+| Trade synchrony | −0.022** | +0.016*** | −0.061*** | −0.006 | +0.020*** | +0.020*** |
+| \|Order imbalance\| | −0.043** | +0.033*** | −0.114*** | −0.014 | +0.041*** | +0.041*** |
+
+Discovery uses 16 seeds and Holm-adjusted p; held-out pools 48 seed-window pairs across six
+windows with a window-cluster bootstrap. Stars: * p < .05, ** p < .01, *** p < .001 (held-out
+raw; discovery Holm). The learning-only held-out drawdown difference is raw p = .047 and does
+not survive Holm correction.
+
+**Robust results.** Learning increases diversity by +0.107 (95% CI [.093, .121]) and the full
+system by +0.122 ([.091, .147]); 94–96% of the 48 paired observations are positive (p < 1e−8).
+Imitation increases synchrony by +0.020 ([.013, .028]) and |imbalance| by +0.041
+([.030, .053]); 90% and 98% of paired observations are positive (p < 1e−10). The full system
+is more coordinated than learning alone: synchrony +0.022, imbalance +0.047 (both p < 1e−8),
+with a small return advantage (+0.037 pp, p = .038) but no drawdown advantage.
+
+**Fragile results.** Full minus static return is −0.019 pp (95% CI [−.081, +.043], p = .56);
+the drawdown improvement is −0.034 pp (drawdowns are 0.034 pp larger; p = .15). Learning-only
+is 0.056 pp worse than static (p = .005) and its drawdown improvement is −0.028 pp (raw
+p = .047, not Holm-corrected). Imitation-only is indistinguishable from static on return
+(−0.018 pp, p = .79), raises coordination, and increases drawdown magnitude by 0.061 pp
+(p = .005). The discovery-window signs for full-minus-static return and synchrony reverse:
++0.110 pp and −0.022 become −0.019 pp and +0.016. The full system's return advantage over
+learning alone is real but small; it does not make the full system better than static priors on
+average.
+
+### 6.3 Strategy divergence and guild lineage
+
+![Strategy divergence and lineage](figures/fig_strategy_dynamics.png)
+
+At tick 0 all conditions have the same mean pairwise signal-genome distance (0.157). Static
+priors stay flat. Learning-only rises to 0.320; the full system rises to 0.254 (imitation pulls
+it back); imitation-only falls to 0.118. Guild diversity tells a related but not identical
+story: full 0.624, learning-only 0.615, imitation-only 0.553, static 0.555. The full system
+keeps high guild diversity while reducing continuous genome distance: imitation helps agents
+cross guild boundaries but also blends their playbooks.
+
+At tick 300, 19.9% of full agents, 16.0% of learning-only agents, 10.6% of imitation-only
+agents, and 0% of static agents have a different final guild; the fractions that ever switched
+are 30.9%, 21.1%, 12.9%, and 0% (10-tick samples). The full system has the most lineage churn,
+even though it is not the most genomically diverse.
+
+### 6.4 The learning–imitation phase map
+
+![Learning × imitation phase map](figures/fig_phase_map.png)
+
+Coordination rises monotonically with imitation at every learning scale; learning lowers
+synchrony at every imitation scale. Return and drawdown are non-monotone. At 1× learning,
+return is best at 0.5× imitation (−1.061%) and deteriorates at 1× (−1.121%) and 2× (−1.167%);
+drawdown magnitude follows the same ordering (1.305%, 1.355%, 1.388%). The best cell is
+learning 1×, imitation 0.5×. Strategy diversity increases with learning (0.547 at 0× to
+0.653–0.662 at 2×); at 1× learning it also increases with imitation (0.578 to 0.635),
+reflecting guild mixing. Exposure falls modestly with learning (33.0% at zero learning to
+32.3% at 0.5× and 31.7% at 1×) and rises slightly with imitation. Coordination is not
+performance.
+
+### 6.5 Exposure, benchmarks, and the missing alpha
+
+![Market versus agent returns](figures/fig_benchmark.png)
+
+The agents hold only about 32% of their equity in stocks on average; the rest is cash. The
+equal-weight market return ranges from −1.40% (discovery) to +1.97% (W6). Agent returns are
+compressed toward zero. In the discovery window the full system returns −0.19% while the market
+returns −1.40%, but its exposure-implied return is about −0.48%; the difference is
+timing/selection and fees, not a fully invested outperformance. In W5 the market rises +1.06%
+while the full system loses −0.76% (exposure 33.7%), a large adverse residual. In W6 the market
+rises +1.97% and the full system earns +0.45% (exposure 25.8%). The conditions differ by a few
+tenths of a percentage point while the market moves by several percentage points. The agents
+are cash-heavy and regime-sensitive; the small condition differences are not a robust alpha.
+
+### 6.6 Observer audit
+
+| Predictor | Future synchrony | Future \|imbalance\| | Future \|drawdown\| |
 |---|---:|---:|---:|
-| v1 composite cascade score | ρ=0.029, p=.82 | ρ=0.044, p=.73 | ρ=−0.133, p=.30 |
-| v2 flow-risk score | **ρ=0.754**, p=6.5e−13 | **ρ=0.769**, p=1.1e−13 | **ρ=0.609**, p=9.5e−08 |
-| Flow synchrony | ρ=0.673, p=1.1e−09 | ρ=0.673, p=1.1e−09 | ρ=0.492, p=3.6e−05 |
-| Flow imbalance | ρ=0.710, p=5.1e−11 | ρ=0.711, p=4.4e−11 | ρ=0.474, p=7.6e−05 |
-| Imitation events | ρ=0.585, p=3.8e−07 | ρ=0.623, p=3.9e−08 | ρ=0.526, p=8.1e−06 |
-| Polarization | ρ=−0.556, p=1.8e−06 | ρ=−0.540, p=4.2e−06 | ρ=−0.546, p=3.0e−06 |
+| v2 flow, discovery | 0.754 | 0.769 | 0.609 |
+| v2 flow, held-out | 0.592 | 0.603 | −0.041 (p = .58) |
+| v1 composite, discovery | 0.029 | 0.044 | −0.133 |
+| v1 composite, held-out | −0.039 | −0.059 | +0.305 |
+| Polarization, discovery | −0.556 | −0.540 | −0.546 |
+| Polarization, held-out | −0.206 | −0.213 | +0.580 |
 
-![Observer audit](figures/fig_observer.png)
+| Predictor | Run AUC, discovery | Run AUC, held-out | Event AUC, discovery | Event AUC, held-out |
+|---|---:|---:|---:|---:|
+| v2 flow | 0.805 | 0.443 | 0.566 | 0.532 |
+| v1 composite | 0.522 | 0.523 | 0.516 | 0.489 |
+| Polarization | 0.283 | 0.733 | 0.475 | 0.484 |
 
-*Figure 5. Run-level observer validation. The v1 composite is uninformative and its
-polarization sign is reversed relative to the risk label; the v2 flow-based score tracks
-future drawdown magnitude. Each point is one run mean; regression lines are shown.*
+![Observer out-of-sample audit](figures/fig_observer_oos.png)
 
-The v1 score is not merely uninformative: at the report level it is **negatively** associated
-with future drawdown magnitude (ρ=−0.170, p=1.2e−07), because it treats polarization as a
-risk factor while polarization behaves as a disagreement buffer. The v2 score reverses this
-and is positively associated with future drawdown at both run (ρ=0.609) and report
-(ρ=0.095, p=.003) levels. Report-level correlations are weaker than run-level correlations
-because most of the between-run variance is averaged away; this is the expected
-pseudo-replication pattern and is why the run-level test is primary.
+On the discovery window the v1 composite is uninformative: run-level correlations with future
+synchrony, |imbalance|, and |drawdown| are 0.029, 0.044, and −0.133 (p = .30 for drawdown).
+Polarization is negatively associated with future |drawdown| (ρ = −0.546), the opposite of its
+risk label. The v2 flow-risk score is strongly associated with future synchrony (ρ = .754),
+|imbalance| (.769), and |drawdown| (.609); the run-level AUC for high future |drawdown| is .805.
+This is the result that motivated a risk narrative.
 
-**Interpretation.** The audit shows that composite observer heuristics can be internally
-coherent yet empirically mis-specified. The validated signal is not "disagreement"; it is
-**order-flow alignment plus imitation**. The revised observer exposes that signal and treats
-polarization as a buffer. The v2 score is post-hoc and should be pre-registered and tested on
-independent windows before being treated as an early-warning system.
+The held-out windows separate prediction from persistence. The v2 flow score still predicts
+future synchrony (ρ = .592) and |imbalance| (.603; p < 1e−18), so it is a genuine
+coordination-persistence signal. Its correlation with future |drawdown| is −0.041 (p = .58),
+and the run-level AUC for high future |drawdown| is .443 — below chance. The event-level AUC is
+.532 (95% CI [.512, .554]), effectively no discrimination. The original composite's held-out
+drawdown correlation is +0.305 and polarization's is +0.580; both have the opposite sign from
+the discovery window. The component that looked protective in one window looks risky in
+another, and the flow score that looked like an early warning in one window does not warn on the
+others.
 
----
+The practical lesson is not that observers are useless. The Physicist and Mathematician fields
+are descriptive and useful; the flow score is a useful measure of order-flow alignment. A
+scalar labelled "risk" must be validated against the outcome it claims to predict, on held-out
+windows, at both run and event levels. A run-level correlation can be driven by between-run
+heterogeneity; an event-level AUC asks whether a report is an early warning. The v2 score is a
+coordination-persistence signal, not a validated crash warning. The application now labels the
+field "flow-alignment risk" rather than "cascade risk".
 
-## 6. Discussion
+### 6.7 The imitation network
 
-1. **Individual learning de-synchronizes, social imitation synchronizes.** Reward learning
-   gives agents differential experiences and pushes genomes apart; imitation pulls them back
-   toward a shared playbook. The full system sits between the two and achieves the best
-   aggregate return, but pays for coordination with a larger drawdown than learning alone.
-2. **Diversity is not free.** The learning conditions increase strategy diversity and reduce
-   cross-sectional return dispersion; imitation alone leaves diversity unchanged and increases
-   coordinated flow. Diversity here is a structural property, not automatically a virtue for
-   performance.
-3. **Observers need component-level validation.** The original composite looked reasonable
-   (dominant narrative + polarization + sparse trust) but failed; its polarization component
-   had the wrong sign. A flow-based score derived from the audit works much better in this
-   window. This is a caution for LLM or agent observers whose reports are consumed as
-   narratives: evaluate the scalars against outcomes, not just their prose.
-4. **Economic magnitudes are small.** The market window is a single declining regime; returns
-   differ by tenths of a percentage point and drawdowns by similar amounts. The statistically
-   robust effects are behavioural (synchrony, diversity, dispersion), not claims of
-   profitability.
+![Imitation network and locations](figures/fig_network.png)
 
----
+| Condition | Events | Events/run | Effective teachers | Mean trust | Fitness gap | Guild change |
+|---|---:|---:|---:|---:|---:|---:|
+| Full | 596 | 37.3 | 14.0 | 0.118 | +0.0045 | 7.2% |
+| Imitation only | 585 | 36.6 | 13.9 | 0.115 | +0.0044 | 10.4% |
+| Learning only | 0 | 0 | — | — | — | — |
+| Static priors | 0 | 0 | — | — | — | — |
 
-## 7. Limitations
-
-- **Single window, single regime.** The snapshot covers five sessions (2026-10-13 to
-  2026-10-19) and ends in a declining market. The results may not generalise across regimes,
-  horizons, or asset classes.
-- **No market impact by design.** The House pins the town price to the replay; agents cannot
-  move prices. This isolates behaviour but removes the endogenous price feedback that real
-  agent-based markets often study.
-- **Long-only, five US large caps, 5-minute bars.** No shorting, options, borrow costs, or
-  volume constraints; fees and spread are fixed.
-- **Observer v2 is post-hoc.** It was motivated by the v1 audit on the same 64 runs. The
-  run-level correlation is strong but not a pre-registered out-of-sample validation.
-- **Data source.** The snapshot is yfinance; the cross-check uses the same Yahoo upstream.
-  An independent intraday vendor was not available, so the data are verified for integrity
-  and consistency, not against a second independent provider.
-- **Rule-based observers/traders.** LLM enrichment was disabled. LLM-powered agents may show
-  different dynamics and observer behaviour.
-- **No claim of alpha.** The system is a behavioural simulation; the returns are not an
-  investment strategy or financial advice.
+All 16 agents appear as both teachers and learners in the full condition. Teacher concentration
+is low (effective teachers 14.0 of 16), mean trust on an imitation edge is 0.118, and teachers
+are slightly fitter than learners (+0.0045). Only 7.2% of full imitation events change the
+learner's guild; imitation usually adjusts weights within a guild. The most common locations
+are the Guild Hall (114 events), Morning Brew Cafe (93), Town Square (70), market (57), Rumor
+Mill (56), and Quant Lab (34). Transmission is diffuse and embedded in the town's social
+geography, not a single guru's broadcast.
 
 ---
 
-## 8. Reproducibility
+## 7. Discussion
+
+The central empirical pattern is a separation between behavioural mechanisms and economic
+outcomes. Learning is a diversifying force: it gives agents different experiences, moves their
+signal genomes apart, and raises guild diversity; the diversity and divergence results replicate
+across all six held-out windows. Imitation is a coordinating force: it raises trade synchrony
+and order-flow imbalance, and the effect replicates across all six held-out windows with high
+sign consistency. The full system balances the two: more diverse than static priors, more
+coordinated than learning alone. The phase map shows coordination can be increased
+monotonically with imitation, while return and drawdown are best at moderate imitation.
+
+The performance result is fragile. The discovery window is a down/high-volatility week;
+learning and the full system lose less than static priors because they are cash-heavy, not
+because they have a robust alpha. Across six held-out windows the full-minus-static return
+difference is statistically indistinguishable from zero and the drawdown difference is slightly
+negative. Learning-only actually underperforms static priors on average. The agents hold about
+one third of their equity in stocks, so their returns are a compressed image of the market; the
+condition differences are small relative to market moves.
+
+The observer result is the sharpest caution. The v1 composite had a coherent narrative and
+failed. The v2 flow score had a strong discovery-window drawdown correlation and a run-level AUC
+of .81, but the correlation reversed on held-out windows and the run-level AUC fell to .44. The
+flow score's coordination prediction survived (ρ ≈ .59–.60), which is exactly what a
+coordination-persistence measure should do; it is not a crash warning. Polarization's sign
+changed across windows. Observer research should report the outcome-specific, held-out,
+run-level and event-level results, not only the in-sample correlation.
+
+The imitation network adds a social-layer result. Transmission is diffuse: all sixteen agents
+teach and learn, effective teacher concentration is low, and the fitness gap is small. The
+town's geography matters: the Guild Hall, cafe, square, market, and Rumor Mill are the main
+sites. Imitation usually adjusts weights within a guild; guild changes are rare. The full system
+has more lineage churn than learning alone because imitation helps agents cross guild boundaries,
+but it also compresses continuous genome distance.
+
+---
+
+## 8. Limitations
+
+- **Seven windows, two months, five mega-caps.** The six held-out windows are not a random
+  sample; they were chosen from the available 60-day five-minute history to span regimes. The
+  discovery window is a down/high-vol week. Other assets, frequencies, and longer samples may
+  differ.
+- **Exogenous prices.** The House absorbs residual order flow, so the town price equals the
+  replay price. This isolates behaviour but removes endogenous price impact, feedback, and
+  liquidity effects.
+- **Long-only, cash-heavy agents.** Five symbols, no shorting, leverage, options, borrow costs,
+  or volume limits. Mean exposure is about 32%; the performance comparisons are not a test of a
+  fully invested strategy.
+- **Rule-based agents and observers.** The learning rule is a lightweight reward-modulated
+  Hebbian update, not deep reinforcement learning; imitation is a fixed blend; observers are
+  heuristics. LLM enrichment was disabled.
+- **Post-hoc v2 and selected windows.** The v2 formula was motivated by the discovery-window v1
+  failure. The held-out windows were not used to fit it, but they were fetched after the formula
+  was fixed and selected by regime. The out-of-sample test is temporal and formula-fixed, not a
+  pre-registered random sample.
+- **Multiple comparisons.** The held-out tests are reported raw; the strong behavioural effects
+  survive Holm correction, but the small performance differences should not be over-interpreted.
+- **Outcome definitions.** The run-level AUC uses one maximum future drawdown per run; the
+  event-level AUC uses report-level 20-tick windows. Both answer useful questions but neither is
+  a full early-warning evaluation with lead-time constraints.
+- **No financial claim.** This is a simulation, not investment advice, and the returns are not
+  an alpha claim.
+
+---
+
+## 9. Reproducibility
 
 ```bash
-# from the repository root
-pip install -r experiments/requirements.txt
-python experiments/run_experiment.py       # 64 runs, ~40-60 s
-python experiments/analyze_results.py      # tables + figures + results.json
-python -m unittest discover -s tests -v    # 21 unit tests
+# Discovery window
+python experiments/run_experiment.py --design base --ticks 300 \
+  --seeds 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16 \
+  --out experiments/results
+
+# Six held-out windows
+for d in experiments/data/windows/w*; do
+  name=$(basename "$d")
+  python experiments/run_experiment.py --design base --ticks 300 \
+    --seeds 1,2,3,4,5,6,7,8 \
+    --snapshot "$d/market_snapshot_5m_5d.json" \
+    --metadata "$d/snapshot_metadata.json" \
+    --out "experiments/results_windows/$name"
+done
+
+# Learning x imitation sweep
+python experiments/run_experiment.py --design sweep --ticks 250 \
+  --seeds 1,2,3,4,5,6,7,8 \
+  --learning-scales 0,0.5,1,2 --imitation-scales 0,0.5,1,2 \
+  --out experiments/results_sweep
+
+# Analysis and figures
+python experiments/analyze_results.py
+python experiments/analyze_extensions.py
+python experiments/analyze_strategy.py
+python -m unittest discover -s tests -v
 ```
 
-Artifacts:
-
-- `experiments/data/market_snapshot_5m_5d.json` — frozen aligned bars;
-- `experiments/data/snapshot_metadata.json` — provenance, validation, cross-check;
-- `experiments/results/` — v2 tick/agent/observer/trust CSVs, run summary, reliability;
-- `experiments/results_v1/` — v1 observer reports used for the audit;
-- `experiments/results/tables/` — condition means, paired tests, guilds, observer correlations;
-- `experiments/figures/` — PDF/PNG figures;
-- `paper/` — arXiv-style LaTeX source and figures.
-
-The experiment seed controls agent decisions and interactions. The market path is fixed, so
-all conditions see the same prices and time stamps; differences are attributable to the
-strategy mechanisms, subject to the stochastic agent seed.
+The experiments use no network. The frozen snapshots and their metadata are under
+`experiments/data/`. The analysis writes `experiments/results/tables/` and
+`experiments/figures/`.
 
 ---
 
-## 9. Conclusion
+## 10. Files
 
-In a controlled replay of real market bars, individual reward learning made the population
-more diverse and less coordinated, and improved downside outcomes relative to fixed MBTI
-priors. Adding social imitation to learning increased coordination and did not
-significantly improve returns; the combination produced the best aggregate return but a
-worse drawdown than learning alone. Imitation alone improved returns relative to static
-priors but not drawdown or diversity.
-The observer audit showed that a plausible composite risk narrative can fail, while an
-order-flow-based signal predicts future synchrony and drawdown. The results argue for
-treating agent-based market simulations as behavioural laboratories: report behavioural
-metrics, validate observer scalars against outcomes, and avoid mistaking narrative coherence
-for predictive validity.
+| File | Description |
+|---|---|
+| `experiments/results/` | Discovery run CSVs, run summary, observer reports, strategies, imitation events, tables, figures |
+| `experiments/results_windows/` | Six held-out window runs |
+| `experiments/results_sweep/` | 4×4 learning × imitation sweep |
+| `experiments/figures/fig_phase_map.*` | Phase map |
+| `experiments/figures/fig_windows_forest.*` | Per-window effects |
+| `experiments/figures/fig_strategy_dynamics.*` | Genome divergence and guild lineage |
+| `experiments/figures/fig_observer_oos.*` | Observer out-of-sample audit |
+| `experiments/figures/fig_network.*` | Imitation network and locations |
+| `experiments/figures/fig_benchmark.*` | Market vs. agent returns and exposure |
+| `paper/main.tex` | arXiv-style manuscript |
+| `paper/refs.bib` | References |
+
+---
+
+*Last updated: 2026-10-21. All numbers in this report are generated from the frozen snapshots
+and the committed runner; see `experiments/results/results_extensions.json` and
+`experiments/results/tables/`.*

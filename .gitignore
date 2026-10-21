@@ -10,3 +10,19 @@ build/
 .DS_Store
 Thumbs.db
 .cache/
+
+# Regenerable raw per-window / sweep micro-data (summaries and tables are committed)
+experiments/results_windows/*/tick_metrics.csv
+experiments/results_windows/*/agent_metrics.csv
+experiments/results_windows/*/observer_reports.csv
+experiments/results_windows/*/strategy_tick_metrics.csv
+experiments/results_windows/*/imitation_events.csv
+experiments/results_windows/*/trust_edges.csv
+experiments/results_sweep/tick_metrics.csv
+experiments/results_sweep/agent_metrics.csv
+experiments/results_sweep/observer_reports.csv
+experiments/results_sweep/strategy_tick_metrics.csv
+experiments/results_sweep/imitation_events.csv
+experiments/results_sweep/trust_edges.csv
+experiments/results/quick2/
+experiments/results/repro_check/

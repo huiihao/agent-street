@@ -1,0 +1,25 @@
+final genome distance
+                  mean     std  median
+condition                             
+full            0.2540  0.0350  0.2579
+imitation_only  0.1184  0.0100  0.1208
+no_imitation    0.3201  0.0314  0.3157
+static          0.1568  0.0000  0.1568
+
+guild switches
+                agents  switched  switch_rate  mean_switches
+condition                                                   
+full               256        51       0.1992         0.7188
+imitation_only     256        27       0.1055         0.2148
+no_imitation       256        41       0.1602         0.4766
+static             256         0       0.0000         0.0000
+
+transition matrix (full)
+final           momentum  mean_reversion  sentiment  contrarian  balanced
+initial                                                                  
+momentum             100              21          0           0         7
+mean_reversion         0               0          0           1         0
+sentiment              0               0          0           0         0
+contrarian             7               0          0         105         0
+balanced               8               0          0           7         0
+figures written

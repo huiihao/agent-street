@@ -77,27 +77,45 @@ the tape is the fills that actually moved cash.
 
 The repository also contains a reproducible empirical study of the simulation:
 
-- **Frozen data**: 390 aligned five-minute bars for AAPL, GOOGL, MSFT, TSLA and
-  AMZN over five sessions, cross-checked bar-for-bar against the source endpoint
-  (`experiments/data/`, SHA-256 in the metadata).
-- **Ablation**: 4 conditions (static priors, imitation only, learning only, full) ×
-  16 seeds × 300 ticks = 64 runs; zero wealth-invariant failures.
+- **Frozen data**: seven 390-bar, five-session snapshots for AAPL, GOOGL, MSFT,
+  TSLA and AMZN — one discovery window and six held-out windows. All 35
+  symbol-windows were cross-checked bar-for-bar against the source endpoint
+  (`experiments/data/` and `experiments/data/windows/`, SHA-256 in the metadata).
+- **Base experiment**: 4 conditions (static priors, imitation only, learning only,
+  full) × 16 seeds on the discovery window and × 8 seeds on each of six held-out
+  windows = 256 runs, 300 ticks each; zero wealth-invariant failures.
+- **Phase sweep**: 4 learning scales × 4 imitation scales × 8 seeds = 128 runs,
+  250 ticks each; zero invariant failures.
 - **Report**: [`experiments/REPORT.md`](experiments/REPORT.md).
 - **Paper**: [`paper/main.tex`](paper/main.tex), with figures and an arXiv build
   guide in [`paper/README.md`](paper/README.md).
 
-**Headline findings.** Individual reward learning is a *diversifying* force: it
-reduces trade synchrony and order-flow imbalance, lowers cross-sectional return
-dispersion, increases strategy diversity, and improves returns and drawdowns
-relative to fixed MBTI priors. Social imitation is a *coordinating* force:
-adding it to learning raises synchrony and imbalance, does not significantly
-improve returns, and worsens drawdown relative to learning alone; imitation
-alone improves returns relative to static priors but not drawdown or diversity. The original
-Social Engineer composite risk score was not predictive; its polarization term
-had the wrong sign. A revised order-flow-based score predicts future synchrony
-(ρ = 0.75), absolute order imbalance (ρ = 0.77), and future drawdown magnitude
-(ρ = 0.61) at the run level. The revised score is post-hoc and is presented as a
-hypothesis for independent validation, not a validated warning system.
+**Headline findings (multi-window).** Individual reward learning is a
+*diversifying* force: it raises strategy diversity (+0.107 on held-out windows)
+and moves signal genomes apart (final pairwise distance 0.320 vs. 0.157 for static
+priors). Social imitation is a *coordinating* force: it raises trade synchrony
+(+0.020) and order-flow imbalance (+0.041), and these effects hold across all six
+held-out windows. The full system balances both: more diverse than static priors,
+more coordinated than learning alone.
+
+The discovery-window **performance advantage does not replicate**. On the
+discovery window the full system beats static priors by +0.110 pp return and
+0.084 pp lower drawdown; on the six held-out windows the same contrast is
+−0.019 pp (p = .56) and drawdown is 0.034 pp *larger* (p = .15), while
+learning-only is 0.056 pp worse (p = .005). Agents hold only ~32% exposure, and
+an equal-weight market benchmark explains most of the return variation; there is
+no alpha claim. The learning × imitation phase map shows coordination rising
+monotonically with imitation, while return and drawdown are best at moderate
+imitation and deteriorate at high imitation.
+
+The observer audit is equally cautionary. The original composite cascade score
+was uninformative, and its polarization term had the wrong sign. A revised
+flow-based score predicts future *coordination* both in and out of sample
+(ρ ≈ .59–.60 on held-out windows), but its discovery-window drawdown signal
+(ρ = .61; run-level AUC .81) reverses out of sample (ρ = −.04; AUC .44), and the
+event-level AUC is only .53. Polarization’s sign flips across windows. The flow
+score is therefore a **coordination-persistence signal, not a validated crash
+warning**; the app labels it *flow-alignment risk*.
 
 ---
 
@@ -289,7 +307,7 @@ Each trader starts with a genome derived from its MBTI dimensions. The genome is
 |---|---|---|---|
 | 🔭 **Physicist** | statistical mechanics | order parameter, dispersion, susceptibility, correlation length, strategy diversity | 70–85% |
 | 📐 **Mathematician** | graph theory | trust components, centrality, sentiment partition, guild composition, diversity | 75–95% |
-| 🧩 **Social Engineer** | social systems | trust density, broker concentration, clustering, polarization, **order-flow alignment**, imitation flow, **flow-risk score**, interventions | 66–90% |
+| 🧩 **Social Engineer** | social systems | trust density, broker concentration, clustering, polarization, **order-flow alignment**, imitation flow, **flow-alignment risk**, interventions | 66–90% |
 | 🔮 **Mystic** | tea leaves | cosmic resonance, karmic debt, the Dao of market coupling | 5–45% |
 
 Observers do not trade. They publish roughly every 20 ticks. The Social Engineer also
@@ -297,8 +315,10 @@ reads the **strategy ecosystem**: guild counts, dominant playbook, mutation/imit
 events, order-flow alignment, and the latest adaptation. Its reports include a concrete
 intervention, e.g. *"encourage cross-guild disagreement at the Guild Hall"* when flow
 alignment rises. The original composite cascade score was audited and replaced by a
-flow-based score in the experiment; see the research artifact above. The revised score is
-post-hoc and should be validated on independent windows.
+flow-based score. The multi-window study shows that the revised score predicts order-flow
+**coordination** in and out of sample, but **not future drawdown** out of sample; it is a
+flow-alignment/coordination signal, not a validated crash warning. Reports label it
+*flow-alignment risk*.
 
 ---
 
@@ -428,8 +448,9 @@ degree, clustering coefficient, polarization, order-flow alignment, imitation co
 a flow-risk score (polarization is treated as a disagreement buffer). The Mathematician
 reads partitions and components. The Physicist reads order parameters and susceptibility.
 The original composite cascade score was audited against future outcomes and replaced by
-the flow-based score; the revision is post-hoc and needs independent validation.
-Four lenses, one system.
+the flow-based score. Multi-window experiments show that the flow score predicts future
+coordination in and out of sample, but not future drawdown out of sample; it is a
+coordination-persistence signal, not a crash warning. Four lenses, one system.
 
 ---
 
@@ -621,12 +642,18 @@ agent-street/
 │   ├── test_matching.py
 │   └── test_strategy.py
 ├── experiments/
-│   ├── data/                    # frozen snapshot + provenance metadata
-│   ├── results/                 # v2 CSVs, tables, results.json
+│   ├── data/                    # discovery snapshot + provenance metadata
+│   │   └── windows/             # six held-out frozen windows
+│   ├── results/                 # discovery CSVs, tables, results.json
+│   ├── results_windows/         # six held-out window runs
+│   ├── results_sweep/           # learning x imitation phase sweep
 │   ├── results_v1/              # v1 observer reports for the audit
 │   ├── figures/                 # PDF/PNG figures
-│   ├── run_experiment.py        # 64-run ablation
-│   ├── analyze_results.py       # statistics + figures
+│   ├── fetch_windows.py         # freeze + cross-check held-out windows
+│   ├── run_experiment.py        # base ablation / phase sweep runner
+│   ├── analyze_results.py       # discovery statistics + figures
+│   ├── analyze_extensions.py    # multi-window, phase map, OOS observer audit
+│   ├── analyze_strategy.py      # genome divergence + guild lineage
 │   └── REPORT.md
 ├── paper/
 │   ├── main.tex                 # arXiv-style manuscript

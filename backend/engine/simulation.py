@@ -90,11 +90,17 @@ class SimulationLoop:
         enable_learning: bool = True,
         enable_imitation: bool = True,
         enable_mutation: bool = True,
+        learning_scale: float = 1.0,
+        imitation_scale: float = 1.0,
+        mutation_scale: float = 1.0,
     ):
         self.seed = SIM_SEED if seed is None else int(seed)
         self.enable_learning = bool(enable_learning)
         self.enable_imitation = bool(enable_imitation)
         self.enable_mutation = bool(enable_mutation)
+        self.learning_scale = max(0.0, float(learning_scale))
+        self.imitation_scale = max(0.0, float(imitation_scale))
+        self.mutation_scale = max(0.0, float(mutation_scale))
         self.tick = 0
         self.running = False
         self.personas: dict[str, PersonaState] = {}
@@ -102,7 +108,12 @@ class SimulationLoop:
         self.market = HistoricalDataProvider(SYMBOLS)
         self.indicators = IndicatorEngine(SYMBOLS)
         self.decision_engine = PersonaDecisionEngine()
-        self.strategy_engine = StrategyEngine(INITIAL_CASH)
+        self.strategy_engine = StrategyEngine(
+            INITIAL_CASH,
+            learning_scale=self.learning_scale,
+            imitation_scale=self.imitation_scale,
+            mutation_scale=self.mutation_scale,
+        )
         self.observer_engine = ObserverEngine()
         self.influence_network = InfluenceNetwork()
         self.matching_engine = MatchingEngine()
