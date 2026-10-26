@@ -48,6 +48,7 @@ const els = {
   speedBtn: $('speed-btn'),
   btnCamera: $('btn-camera'),
   btnRotate: $('btn-rotate'),
+  btnLabels: $('btn-labels'),
   conn: document.querySelector('.status-conn'),
   connDot: $('conn-dot'),
   connText: $('conn-text'),
@@ -390,6 +391,12 @@ function bindControls() {
     if (!town) return;
     const active = town.toggleAutoRotate();
     els.btnRotate.classList.toggle('is-active', active);
+  });
+  els.btnLabels.addEventListener('click', () => {
+    if (!town) return;
+    const active = town.toggleLabels();
+    els.btnLabels.classList.toggle('is-active', active);
+    els.btnLabels.setAttribute('aria-pressed', String(active));
   });
 
   els.speedBtn.textContent = `${currentSpeed}×`;

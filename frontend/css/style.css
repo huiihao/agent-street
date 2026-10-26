@@ -383,19 +383,20 @@ body::after {
 }
 
 .town-label--loc {
-  padding: 2px 6px;
-  border: 1px solid rgba(150, 180, 220, 0.12);
+  padding: 2px 5px;
+  border: 1px solid rgba(150, 180, 220, 0.14);
   border-radius: 4px;
-  background: rgba(5, 10, 18, 0.55);
-  color: rgba(220, 230, 245, 0.78);
-  font: 600 8px var(--font-sans);
+  background: rgba(5, 10, 18, 0.70);
+  color: rgba(226, 236, 248, 0.90);
+  font: 600 7.5px var(--font-sans);
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.07em;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   backdrop-filter: blur(4px);
 }
 
 .town-label-icon {
-  font-size: 9px;
+  font-size: 8px;
   line-height: 1;
   opacity: 0.9;
 }
@@ -404,12 +405,18 @@ body::after {
   padding: 1px 5px;
   border: 1px solid rgba(150, 180, 220, 0.16);
   border-radius: 999px;
-  background: rgba(5, 10, 18, 0.66);
+  background: rgba(5, 10, 18, 0.78);
   color: var(--ink);
   font: 600 8px var(--font-mono);
   letter-spacing: 0.04em;
   text-shadow: 0 1px 2px #000;
   backdrop-filter: blur(4px);
+  transition: opacity 0.12s ease;
+}
+
+#btn-labels {
+  font: 700 10px var(--font-mono);
+  letter-spacing: -0.04em;
 }
 
 .town-label--agent.is-observer {
@@ -480,11 +487,11 @@ body::after {
   position: absolute;
   inset: 0;
   z-index: 7;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: radial-gradient(circle at 50% 45%, rgba(5, 10, 18, 0.10), rgba(5, 10, 18, 0.58));
-  backdrop-filter: blur(1px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 18px;
+  background: linear-gradient(180deg, transparent 48%, rgba(3, 7, 14, 0.58) 100%);
   transition: opacity 0.45s ease;
 }
 
@@ -494,34 +501,73 @@ body::after {
 }
 
 .overlay-card {
-  max-width: 380px;
-  padding: 26px 26px 24px;
+  width: min(480px, 100%);
+  padding: 11px 13px 12px;
   border: 1px solid var(--line-strong);
-  border-radius: 16px;
-  background: rgba(8, 14, 25, 0.92);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  text-align: center;
+  border-radius: 12px;
+  background: rgba(8, 14, 25, 0.90);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  text-align: left;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 14px;
+  align-items: center;
 }
 
 .eyebrow {
   color: var(--amber);
-  font: 600 8px var(--font-sans);
+  font: 600 7px var(--font-sans);
   text-transform: uppercase;
-  letter-spacing: 0.26em;
+  letter-spacing: 0.24em;
+}
+
+.overlay-card .eyebrow {
+  grid-column: 1 / -1;
 }
 
 .overlay-card h3 {
-  margin-top: 9px;
-  font: 600 20px var(--font-sans);
+  margin: 3px 0 0;
+  font: 600 15px var(--font-sans);
   letter-spacing: -0.01em;
   color: var(--ink);
 }
 
 .overlay-card p:not(.eyebrow) {
-  margin: 9px 0 17px;
+  margin: 3px 0 0;
+  max-width: 390px;
   color: var(--muted);
-  font-size: 11px;
-  line-height: 1.65;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.overlay-card .btn {
+  grid-column: 2;
+  grid-row: 2 / span 2;
+  align-self: center;
+  white-space: nowrap;
+  padding: 9px 13px;
+  font-size: 9px;
+}
+
+.town-container:not(.is-running) .town-hint {
+  opacity: 0;
+}
+
+@media (max-width: 720px) {
+  .town-overlay {
+    padding: 12px;
+  }
+
+  .overlay-card {
+    grid-template-columns: 1fr;
+    row-gap: 7px;
+  }
+
+  .overlay-card .btn {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
 }
 
 .town-loading {
@@ -1794,6 +1840,7 @@ button { font-family: inherit; }
   .town-panel { height: 440px; }
   .town-container { min-height: 0; height: auto; }
   .town-label--loc { display: none; }
+  #btn-labels { display: none; }
   .stats-strip { grid-template-columns: 1fr 1fr; gap: 8px; }
   .stat-tile { padding: 9px 10px; }
   .stat-value { font-size: 16px; }

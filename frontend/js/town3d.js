@@ -26,6 +26,31 @@ const TILE = 1;
 const OBSERVERS = new Set(['physicist', 'mathematician', 'social_engineer', 'mystic']);
 const OBSERVER_ICONS = { physicist: '⌬', mathematician: 'π', social_engineer: '⚙', mystic: '☾' };
 
+// Short screen labels keep the diorama legible; the full name is the title.
+const LOCATION_SHORT = {
+  home_ne: 'Blue House',
+  home_nw: 'Red House',
+  home_se: 'Green House',
+  home_sw: 'Yellow House',
+  market: 'Trading Floor',
+  cafe: 'Morning Brew',
+  library: 'Data Library',
+  square: 'Town Square',
+  park: 'Willow Park',
+  rumor: 'Rumor Mill',
+  lab: 'Quant Lab',
+  hall: 'Guild Hall',
+  observatory: 'Observatory',
+  math_tower: 'Math Tower',
+  fortune_tent: 'Fortune Tent',
+};
+const LOCATION_PRIORITY = {
+  market: 0, cafe: 1, library: 2, square: 3,
+  observatory: 4, math_tower: 5, hall: 6, rumor: 7,
+  lab: 8, park: 9, fortune_tent: 10,
+  home_ne: 20, home_nw: 20, home_se: 20, home_sw: 20,
+};
+
 const PALETTE = {
   grass: '#4d7a3a',
   grassAlt: '#568442',
@@ -211,6 +236,7 @@ export class Town3D {
     this._downAt = null;
     this._cameraTween = null;
     this._userInteracted = false;
+    this.labelsVisible = true;
     this._baseCameraDistance = Math.hypot(14, 17.65, 21);
     this._tickerAccumulator = 0;
     this._tickerTexture = null;
@@ -554,6 +580,11 @@ export class Town3D {
     return this.controls.autoRotate;
   }
 
+  toggleLabels(force) {
+    this.labelsVisible = typeof force === 'boolean' ? force : !this.labelsVisible;
+    return this.labelsVisible;
+  }
+
   dispose() {
     this._running = false;
     if (this._resizeObserver) this._resizeObserver.disconnect();
@@ -891,7 +922,7 @@ export class Town3D {
       this.groundGroup.add(group);
       this.lamps.push({ bulbMat, group });
 
-      if (index < 3) {
+      if (index < 5) {
         const light = new THREE.PointLight(0xffb85c, 0, 7, 2);
         light.position.set(x, 0.9, z);
         this.scene.add(light);
@@ -900,9 +931,247 @@ export class Town3D {
       }
     });
 
-    // A couple of parked cars for scale.
+    // Parked cars for scale, kept clear of the crosswalks.
     this._addCar(2.5, 4, 0x3f6f9e, 0);
+    this._addCar(7.5, 4, 0x8f5b48, 0);
     this._addCar(12.5, 4, 0x9e6b3f, Math.PI);
+    this._addCar(16.5, 4, 0x4d6f5a, Math.PI);
+    this._buildEntrance();
+    this._buildLandscaping();
+  }
+
+  _decorFree(tx, ty) {
+    const x = Math.round(tx);
+    const y = Math.round(ty);
+    const tile = this.mapData?.[y]?.[x] ?? 0;
+    return tile === 0 || tile === 6;
+  }
+
+  _addPlanter(tx, ty, flowerColor = 0xe8d44d) {
+    if (!this._decorFree(tx, ty)) return;
+    const { x, z } = tileToWorld(tx, ty);
+    const group = new THREE.Group();
+    const box = new THREE.Mesh(
+      new THREE.BoxGeometry(0.48, 0.22, 0.32),
+      new THREE.MeshStandardMaterial({ color: 0x5b4430, roughness: 0.88 }),
+    );
+    box.position.y = 0.11;
+    box.castShadow = true;
+    group.add(box);
+    const soil = new THREE.Mesh(
+      new THREE.BoxGeometry(0.40, 0.035, 0.25),
+      new THREE.MeshStandardMaterial({ color: 0x2d2118, roughness: 1 }),
+    );
+    soil.position.y = 0.225;
+    group.add(soil);
+    const shrub = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.14, 0),
+      new THREE.MeshStandardMaterial({ color: 0x477f45, roughness: 0.86, flatShading: true }),
+    );
+    shrub.position.y = 0.33;
+    shrub.castShadow = true;
+    group.add(shrub);
+    for (let i = 0; i < 4; i += 1) {
+      const flower = new THREE.Mesh(
+        new THREE.SphereGeometry(0.035, 5, 4),
+        new THREE.MeshStandardMaterial({
+          color: i % 2 ? flowerColor : 0xf1efe2,
+          emissive: flowerColor,
+          emissiveIntensity: 0.08,
+          roughness: 0.65,
+        }),
+      );
+      flower.position.set(-0.13 + i * 0.085, 0.43 + (i % 2) * 0.025, (i % 2 ? 0.05 : -0.04));
+      group.add(flower);
+    }
+    group.position.set(x, 0, z);
+    group.rotation.y = (hashString(`${tx}:${ty}:planter`) % 360) * Math.PI / 180;
+    this.groundGroup.add(group);
+  }
+
+  _addBench(tx, ty, rotation = 0) {
+    if (!this._decorFree(tx, ty)) return;
+    const { x, z } = tileToWorld(tx, ty);
+    const wood = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.84 });
+    const metal = new THREE.MeshStandardMaterial({ color: 0x303844, roughness: 0.55, metalness: 0.4 });
+    const group = new THREE.Group();
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.055, 0.22), wood);
+    seat.position.y = 0.22;
+    seat.castShadow = true;
+    group.add(seat);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.19, 0.045), wood);
+    back.position.set(0, 0.36, -0.095);
+    back.castShadow = true;
+    group.add(back);
+    for (const side of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.22, 0.18), metal);
+      leg.position.set(side * 0.24, 0.11, 0);
+      group.add(leg);
+    }
+    group.position.set(x, 0, z);
+    group.rotation.y = rotation;
+    this.groundGroup.add(group);
+  }
+
+  _addRock(tx, ty, scale = 1) {
+    const { x, z } = tileToWorld(tx, ty);
+    const rock = new THREE.Mesh(
+      new THREE.DodecahedronGeometry(0.13 * scale, 0),
+      new THREE.MeshStandardMaterial({ color: 0x6f7478, roughness: 0.94, flatShading: true }),
+    );
+    rock.position.set(x, 0.09 * scale, z);
+    rock.rotation.set(0.2, (hashString(`${tx}:${ty}`) % 360) * Math.PI / 180, -0.1);
+    rock.castShadow = true;
+    this.groundGroup.add(rock);
+  }
+
+  _addReeds(tx, ty) {
+    const { x, z } = tileToWorld(tx, ty);
+    const group = new THREE.Group();
+    const stemMat = new THREE.MeshStandardMaterial({ color: 0x547c42, roughness: 0.9 });
+    for (let i = 0; i < 5; i += 1) {
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.012, 0.34, 4), stemMat);
+      stem.position.set((i - 2) * 0.045, 0.17, (i % 3 - 1) * 0.05);
+      stem.rotation.z = (i - 2) * 0.09;
+      group.add(stem);
+    }
+    group.position.set(x, 0, z);
+    this.groundGroup.add(group);
+  }
+
+  _addPath(tx, ty1, ty2, width = 0.3) {
+    const a = tileToWorld(tx, ty1);
+    const b = tileToWorld(tx, ty2);
+    const length = Math.abs(b.z - a.z);
+    if (length < 0.02) return;
+    const path = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, length),
+      new THREE.MeshStandardMaterial({ color: 0x8d8879, roughness: 0.96 }),
+    );
+    path.rotation.x = -Math.PI / 2;
+    path.position.set(a.x, 0.014, (a.z + b.z) / 2);
+    path.receiveShadow = true;
+    this.groundGroup.add(path);
+    // A darker seam makes the path read as paving rather than a floating strip.
+    const seam = new THREE.Mesh(
+      new THREE.PlaneGeometry(width + 0.04, length),
+      new THREE.MeshBasicMaterial({ color: 0x4d514d, transparent: true, opacity: 0.35 }),
+    );
+    seam.rotation.x = -Math.PI / 2;
+    seam.position.set(a.x, 0.008, (a.z + b.z) / 2);
+    this.groundGroup.add(seam);
+  }
+
+  _addConifer(parent, x, z, scale = 1) {
+    const group = new THREE.Group();
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.035, 0.055, 0.3, 6),
+      new THREE.MeshStandardMaterial({ color: PALETTE.trunk, roughness: 0.95 }),
+    );
+    trunk.position.y = 0.15;
+    trunk.castShadow = true;
+    group.add(trunk);
+    const colors = [PALETTE.leafA, PALETTE.leafB, PALETTE.leafC];
+    for (let i = 0; i < 3; i += 1) {
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(0.27 - i * 0.055, 0.32, 7),
+        new THREE.MeshStandardMaterial({ color: colors[i], roughness: 0.86, flatShading: true }),
+      );
+      cone.position.y = 0.34 + i * 0.16;
+      cone.castShadow = true;
+      group.add(cone);
+    }
+    group.position.set(x, 0, z);
+    group.scale.setScalar(scale);
+    parent.add(group);
+  }
+
+  _buildEntrance() {
+    // Front-right entrance: it frames the empty foreground without crowding
+    // the fountain and Town Square label.
+    const { x, z } = tileToWorld(15, 12.25);
+    const group = new THREE.Group();
+    const wood = new THREE.MeshStandardMaterial({ color: 0x5d422c, roughness: 0.86 });
+    const darkWood = new THREE.MeshStandardMaterial({ color: 0x3e2b1d, roughness: 0.9 });
+    for (const side of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.12, 0.12), wood);
+      post.position.set(side * 0.96, 0.56, 0);
+      post.castShadow = true;
+      group.add(post);
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.12, 4), darkWood);
+      cap.position.set(side * 0.96, 1.18, 0);
+      group.add(cap);
+      const lantern = new THREE.Mesh(
+        new THREE.SphereGeometry(0.07, 8, 6),
+        new THREE.MeshStandardMaterial({
+          color: 0xffd88a,
+          emissive: 0xffb84a,
+          emissiveIntensity: 0.8,
+          roughness: 0.35,
+        }),
+      );
+      lantern.position.set(side * 0.96, 0.92, 0.09);
+      group.add(lantern);
+    }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.13, 0.14), wood);
+    beam.position.y = 1.12;
+    beam.castShadow = true;
+    group.add(beam);
+    const signCanvas = makeCanvas(512, 112);
+    const sctx = signCanvas.getContext('2d');
+    sctx.fillStyle = '#1a120d';
+    sctx.fillRect(0, 0, 512, 112);
+    sctx.strokeStyle = '#d6b36a';
+    sctx.lineWidth = 5;
+    sctx.strokeRect(5, 5, 502, 102);
+    sctx.fillStyle = '#f3d893';
+    sctx.font = '700 42px Sora, sans-serif';
+    sctx.textAlign = 'center';
+    sctx.textBaseline = 'middle';
+    sctx.fillText('AGENT STREET', 256, 48);
+    sctx.fillStyle = '#9fb5bf';
+    sctx.font = '600 17px "JetBrains Mono", monospace';
+    sctx.letterSpacing = '5px';
+    sctx.fillText('MARKET DIORAMA', 256, 83);
+    const sign = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.64, 0.36),
+      new THREE.MeshStandardMaterial({ map: canvasTexture(signCanvas), roughness: 0.8 }),
+    );
+    sign.position.set(0, 0.94, 0.075);
+    group.add(sign);
+    group.position.set(x, 0, z);
+    this.groundGroup.add(group);
+
+    this._addPlanter(14.2, 12.25, 0xe8d44d);
+    this._addPlanter(15.3, 12.25, 0xe88a8a);
+    this._addPath(15, 11.05, 12.3, 0.34);
+    this._addConifer(group, -1.45, 0.12, 0.72);
+    this._addConifer(group, 1.45, 0.12, 0.72);
+  }
+
+  _buildLandscaping() {
+    // Planters and benches read as small town furniture at the default zoom.
+    this._addPlanter(7.0, 7.2, 0xe8d44d);
+    this._addPlanter(13.0, 7.2, 0xe88a8a);
+    this._addPlanter(4.4, 9.7, 0x9ad8ff);
+    this._addPlanter(15.6, 9.7, 0xe8d44d);
+    this._addPlanter(7.6, 12.7, 0xe88a8a);
+    this._addPlanter(12.4, 12.7, 0x9ad8ff);
+    this._addBench(4.0, 8.5, 0);
+    this._addBench(16.0, 8.5, Math.PI);
+    this._addBench(8.2, 10.7, Math.PI / 2);
+    this._addBench(11.8, 10.7, -Math.PI / 2);
+    this._addPath(5, 5.6, 7.9, 0.32);
+    this._addPath(2, 10.2, 10.95, 0.32);
+    // Reeds and rocks soften the pond edge.
+    this._addRock(8.55, 9.1, 1.0);
+    this._addRock(10.45, 9.25, 0.9);
+    this._addRock(8.7, 10.55, 0.8);
+    this._addRock(10.35, 10.45, 1.05);
+    this._addReeds(8.75, 9.8);
+    this._addReeds(10.35, 9.75);
+    this._addReeds(9.25, 8.8);
+    this._addReeds(10.25, 10.2);
   }
 
   _addCar(x, z, color, rotation) {
@@ -1955,18 +2224,19 @@ export class Town3D {
   }
 
   _buildLocationLabels() {
-    for (const [id, entry] of this.buildingLabels) {
+    for (const entry of this.buildingLabels) {
       entry.el.remove();
     }
     this.buildingLabels = [];
     for (const loc of this.locations) {
       const el = document.createElement('div');
       el.className = 'town-label town-label--loc';
+      el.title = loc.name;
       const icon = document.createElement('span');
       icon.className = 'town-label-icon';
       icon.textContent = loc.icon || '•';
       const label = document.createElement('span');
-      label.textContent = loc.name;
+      label.textContent = LOCATION_SHORT[loc.id] || loc.name;
       el.append(icon, label);
       this.labelLayer.appendChild(el);
       const anchor = this.buildingParts.find((part) => part.id === loc.id);
@@ -1975,7 +2245,14 @@ export class Town3D {
         anchor ? anchor.labelHeight : 1.2,
         anchor ? anchor.z : tileToWorld(loc.tileX, loc.tileY).z,
       );
-      this.buildingLabels.push({ id: loc.id, el, world, width: Math.max(60, el.offsetWidth || 90) });
+      this.buildingLabels.push({
+        id: loc.id,
+        el,
+        world,
+        width: Math.max(54, el.offsetWidth || 76),
+        height: Math.max(12, el.offsetHeight || 14),
+        priority: LOCATION_PRIORITY[loc.id] ?? 15,
+      });
     }
   }
 
@@ -2304,7 +2581,16 @@ export class Town3D {
     if (!width || !height) return;
     const v = new THREE.Vector3();
 
+    // Agent labels are intentionally transient: the scene stays readable when
+    // 20 traders are present, and hovering/selecting reveals the identity.
     for (const agent of this.agents.values()) {
+      const active = this.labelsVisible && (
+        this.hovered === agent.id || this.selected === agent.id
+      );
+      if (!active) {
+        agent.labelEl.style.opacity = '0';
+        continue;
+      }
       v.set(agent.group.position.x, agent.group.position.y + 0.78, agent.group.position.z);
       v.project(this.camera);
       const visible = v.z < 1 && Math.abs(v.x) < 1.15 && Math.abs(v.y) < 1.15;
@@ -2314,8 +2600,13 @@ export class Town3D {
       }
       const x = clamp((v.x * 0.5 + 0.5) * width, 24, width - 24);
       const y = (-v.y * 0.5 + 0.5) * height;
-      agent.labelEl.style.opacity = this.hovered === agent.id || this.selected === agent.id ? '1' : '0.82';
+      agent.labelEl.style.opacity = '1';
       agent.labelEl.style.transform = `translate(-50%, -100%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+    }
+
+    if (!this.labelsVisible) {
+      for (const entry of this.buildingLabels) entry.el.style.opacity = '0';
+      return;
     }
 
     const projected = [];
@@ -2329,27 +2620,46 @@ export class Town3D {
       }
       projected.push({
         entry,
-        x: clamp((v.x * 0.5 + 0.5) * width, 54, width - 54),
+        x: (v.x * 0.5 + 0.5) * width,
         y: (-v.y * 0.5 + 0.5) * height,
       });
     }
-    projected.sort((a, b) => a.y - b.y);
+
+    // Place landmarks first; houses only get a slot if one remains. Candidate
+    // offsets keep the label near its roof while resolving the dense north row.
+    projected.sort((a, b) => (
+      a.entry.priority - b.entry.priority || a.y - b.y
+    ));
     const placed = [];
+    const offsets = [
+      [0, 0], [0, -16], [0, -32], [0, -48],
+      [-14, -16], [14, -16], [0, 16], [-14, 16],
+      [14, 16], [0, -64], [-28, -32], [28, -32],
+      [0, -80], [0, 32],
+    ];
     for (const item of projected) {
-      let { x, y } = item;
-      // Nudge labels up when they would collide with an already placed one.
-      for (let attempt = 0; attempt < 3; attempt += 1) {
+      const entry = item.entry;
+      const halfWidth = entry.width / 2;
+      let chosen = null;
+      for (const [dx, dy] of offsets) {
+        const x = clamp(item.x + dx, halfWidth + 8, width - halfWidth - 8);
+        const y = clamp(item.y + dy, 12, height - 8);
         const collides = placed.some((other) => (
-          Math.abs(other.y - y) < 13
-          && Math.abs(other.x - x) < (other.width + item.entry.width) / 2 + 4
+          Math.abs(other.x - x) < (other.width + entry.width) / 2 + 4
+          && Math.abs(other.y - y) < (other.height + entry.height) / 2 + 4
         ));
-        if (!collides) break;
-        y -= 13;
+        if (!collides) {
+          chosen = { x, y };
+          break;
+        }
       }
-      y = Math.max(12, y);
-      placed.push({ x, y, width: item.entry.width });
-      item.entry.el.style.opacity = '0.62';
-      item.entry.el.style.transform = `translate(-50%, -100%) translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+      if (!chosen) {
+        entry.el.style.opacity = '0';
+        continue;
+      }
+      placed.push({ ...chosen, width: entry.width, height: entry.height });
+      entry.el.style.opacity = entry.priority >= 20 ? '0.54' : '0.80';
+      entry.el.style.transform = `translate(-50%, -100%) translate(${chosen.x.toFixed(1)}px, ${chosen.y.toFixed(1)}px)`;
     }
   }
 
@@ -2366,25 +2676,25 @@ export class Town3D {
       sky.lerp(C.rain, 0.35);
     }
     this.scene.fog.color.copy(sky);
-    this.scene.fog.density = 0.010 + (this.rain ? 0.012 : 0.002) + night * 0.004;
+    this.scene.fog.density = 0.008 + (this.rain ? 0.006 : 0.002) + night * 0.003;
 
     const sunAngle = clamp((hour - 6) / 12, 0, 1);
     const sunX = Math.cos(sunAngle * Math.PI) * 16;
     const sunY = Math.max(1.5, Math.sin(sunAngle * Math.PI) * 20);
     const sunZ = -6 + sunAngle * 8;
     this.sun.position.set(sunX, sunY, sunZ);
-    this.sun.intensity = (0.06 + 2.4 * daylight) * (this.rain ? 0.65 : 1);
+    this.sun.intensity = (0.06 + 2.4 * daylight) * (this.rain ? 0.72 : 1);
     const warm = smoothstep(0.35, 0.0, Math.abs(sunAngle - 0.5));
     this.sun.color.setRGB(1.0, lerp(0.86, 0.94, warm), lerp(0.68, 0.86, warm));
 
-    this.hemi.intensity = 0.34 + 0.52 * daylight;
-    this.ambient.intensity = 0.34 + 0.16 * daylight;
+    this.hemi.intensity = 0.44 + 0.46 * daylight;
+    this.ambient.intensity = 0.44 + 0.16 * daylight;
     this.ambient.color.setRGB(
       lerp(0.56, 1.0, daylight),
       lerp(0.66, 1.0, daylight),
       lerp(0.98, 1.0, daylight),
     );
-    this.moon.intensity = 0.95 * night;
+    this.moon.intensity = 1.15 * night;
     this.starMaterial.opacity = Math.pow(night, 1.6) * 0.95;
     this.stars.rotation.y += dt * 0.002;
     this.fireflyMaterial.opacity = night * (this.rain ? 0.25 : 0.8);
@@ -2428,7 +2738,7 @@ export class Town3D {
       this.container.style.setProperty('--sky-glow', night > 0.5 ? 'rgba(120, 165, 235, 0.12)' : 'rgba(255, 238, 205, 0.18)');
     }
 
-    this.renderer.toneMappingExposure = 0.94 + daylight * 0.12;
+    this.renderer.toneMappingExposure = 1.00 + daylight * 0.10;
     this._updateRain(dt, night);
   }
 

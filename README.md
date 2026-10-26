@@ -465,7 +465,7 @@ coordination-persistence signal, not a crash warning. Four lenses, one system.
 
 | Panel | What it shows |
 |---|---|
-| **The Town** | Three.js diorama; drag to orbit, scroll to zoom, hover/click an agent |
+| **The Town** | Three.js diorama; drag to orbit, scroll to zoom, hover/click an agent; **Aa** toggles location labels. Trader labels are hidden until hover/selection, so the scene stays legible. |
 | **Market** | **Candles** (OHLC + volume + MA9/MA21), **Compare** (normalised lines), **Guilds** (strategy field) |
 | **Leaderboard** | Mark-to-market equity, return and each trader's current guild code; click to inspect |
 | **Stats strip** | Total equity, crowd sentiment meter, breadth, trading fees |
