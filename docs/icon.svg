@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Agent Street: a floating market town">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="0.55" stop-color="#0c1c30"/>
+      <stop offset="1" stop-color="#112a44"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.52" r="0.55">
+      <stop offset="0" stop-color="#5ad1ff" stop-opacity="0.20"/>
+      <stop offset="0.55" stop-color="#5ad1ff" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#5ad1ff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#357a58"/>
+      <stop offset="1" stop-color="#1d4a37"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b9f4ff"/>
+      <stop offset="1" stop-color="#45c4ea"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd981"/>
+      <stop offset="1" stop-color="#d99a22"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ef8b78"/>
+      <stop offset="1" stop-color="#b94b40"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <filter id="glowSmall" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="3"/>
+    </filter>
+    <clipPath id="round">
+      <rect width="512" height="512" rx="112"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#round)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <rect width="512" height="512" fill="url(#glow)"/>
+
+    <!-- subtle town-plan grid -->
+    <g stroke="#1a3852" stroke-opacity="0.35" stroke-width="1">
+      <path d="M0 118 H512 M0 198 H512 M0 278 H512 M0 358 H512 M0 438 H512"/>
+      <path d="M48 0 V512 M128 0 V512 M208 0 V512 M288 0 V512 M368 0 V512 M448 0 V512"/>
+    </g>
+
+    <!-- floating diorama slab -->
+    <ellipse cx="256" cy="396" rx="158" ry="24" fill="#000" opacity="0.34" filter="url(#soft)"/>
+    <path d="M96 258 L256 340 L256 372 L96 290 Z" fill="#091522"/>
+    <path d="M416 258 L256 340 L256 372 L416 290 Z" fill="#10263b"/>
+    <path d="M256 176 L416 258 L256 340 L96 258 Z" fill="url(#top)" stroke="#e8b34a" stroke-opacity="0.62" stroke-width="2.5"/>
+
+    <!-- dashed observer orbit -->
+    <ellipse cx="256" cy="270" rx="206" ry="92" fill="none" stroke="#5ad1ff"
+             stroke-opacity="0.36" stroke-width="2" stroke-dasharray="2 10"
+             transform="rotate(-7 256 270)"/>
+
+    <!-- roads -->
+    <path d="M256 188 L256 331" stroke="#3a4652" stroke-width="11" stroke-linecap="round"/>
+    <path d="M110 258 L402 258" stroke="#3a4652" stroke-width="11" stroke-linecap="round"/>
+    <path d="M256 196 L256 323" stroke="#e8b34a" stroke-width="1.5" stroke-opacity="0.65" stroke-dasharray="8 9"/>
+    <path d="M122 258 L390 258" stroke="#e8b34a" stroke-width="1.5" stroke-opacity="0.65" stroke-dasharray="8 9"/>
+
+    <!-- left red-roof house -->
+    <path d="M208 228 L237 242 L208 256 L179 242 Z" fill="url(#red)"/>
+    <path d="M179 242 L208 256 L208 300 L179 286 Z" fill="#132839"/>
+    <path d="M208 256 L237 242 L237 286 L208 300 Z" fill="#1b3550"/>
+    <path d="M190 263 L202 269 L202 279 L190 273 Z" fill="#ffd27a" opacity="0.9"/>
+    <path d="M214 271 L226 265 L226 277 L214 283 Z" fill="#ffd27a" opacity="0.62"/>
+
+    <!-- center trading tower -->
+    <path d="M270 115 L304 132 L270 149 L236 132 Z" fill="url(#cyan)"/>
+    <path d="M236 132 L270 149 L270 267 L236 250 Z" fill="#10243a"/>
+    <path d="M270 149 L304 132 L304 250 L270 267 Z" fill="#193651"/>
+    <!-- tower windows -->
+    <g fill="#8fe6ff">
+      <path d="M243 157 L252 162 L252 169 L243 164 Z" opacity="0.9"/>
+      <path d="M243 176 L252 181 L252 188 L243 183 Z" opacity="0.8"/>
+      <path d="M243 195 L252 200 L252 207 L243 202 Z" opacity="0.65"/>
+      <path d="M243 214 L252 219 L252 226 L243 221 Z" opacity="0.55"/>
+      <path d="M279 160 L288 155 L288 162 L279 167 Z" opacity="0.9"/>
+      <path d="M279 179 L288 174 L288 181 L279 186 Z" opacity="0.8"/>
+      <path d="M279 198 L288 193 L288 200 L279 205 Z" opacity="0.65"/>
+      <path d="M279 217 L288 212 L288 219 L279 224 Z" opacity="0.55"/>
+    </g>
+    <!-- market beacon -->
+    <path d="M270 115 V94" stroke="#d9f8ff" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="270" cy="92" r="7" fill="#8fe6ff" opacity="0.55" filter="url(#glowSmall)"/>
+    <circle cx="270" cy="92" r="3" fill="#e8ffff"/>
+
+    <!-- right amber-roof cafe -->
+    <path d="M311 231 L340 245 L311 259 L282 245 Z" fill="url(#amber)"/>
+    <path d="M282 245 L311 259 L311 297 L282 283 Z" fill="#172c3e"/>
+    <path d="M311 259 L340 245 L340 283 L311 297 Z" fill="#203c55"/>
+    <path d="M291 262 L303 256 L303 268 L291 274 Z" fill="#ffd27a" opacity="0.88"/>
+    <path d="M317 270 L329 264 L329 276 L317 282 Z" fill="#ffd27a" opacity="0.7"/>
+
+    <!-- tree -->
+    <path d="M160 266 V286" stroke="#5c3f27" stroke-width="4" stroke-linecap="round"/>
+    <path d="M160 269 L144 286 L176 286 Z" fill="#3c7f45"/>
+    <path d="M160 252 L141 274 L179 274 Z" fill="#2f6b39"/>
+    <path d="M160 238 L145 258 L175 258 Z" fill="#4a9352"/>
+
+    <!-- agents on the paths -->
+    <g>
+      <circle cx="232" cy="317" r="4" fill="#f0b429"/>
+      <circle cx="290" cy="300" r="4" fill="#5ad1ff"/>
+      <circle cx="317" cy="268" r="4" fill="#e88a8a"/>
+      <circle cx="270" cy="315" r="4" fill="#8fe6ff"/>
+    </g>
+
+  </g>
+
+  <rect x="6" y="6" width="500" height="500" rx="108" fill="none"
+        stroke="#f0b429" stroke-opacity="0.5" stroke-width="3"/>
+</svg>

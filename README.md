@@ -8,6 +8,10 @@
 
 </div>
 
+<p align="center">
+  <img src="docs/icon.png" width="112" height="112" alt="Agent Street icon">
+</p>
+
 <h1 align="center">AGENT STREET</h1>
 
 <p align="center">
@@ -28,8 +32,9 @@
 
 ![Agent Street](docs/screenshot.png)
 
-<p align="center"><sub>The town at dusk. The selected trader is in the <b>Strategy</b> tab, showing a genome that
-has drifted to 33% mean reversion after sixteen generations of live trading.</sub></p>
+<p align="center"><sub>The town at dusk. The selected trader is in the <b>Strategy</b> tab, showing the
+evolved signal genome and guild lineage. Trader labels appear only on hover/selection; the <b>Aa</b>
+button toggles the landmark labels.</sub></p>
 
 ---
 
@@ -631,6 +636,7 @@ agent-street/
 │   └── mbti/                    # personality definitions and priors
 ├── frontend/
 │   ├── index.html
+│   ├── assets/                  # icon.svg / icon-192 / icon-512
 │   ├── css/style.css
 │   ├── js/
 │   │   ├── main.js              # bootstrap, WebSocket, controls
@@ -669,6 +675,9 @@ agent-street/
 │   ├── README.md                # build / arXiv notes
 │   └── figures/
 ├── docs/
+│   ├── icon.svg                 # project icon (vector)
+│   ├── icon.png                 # 512px icon
+│   ├── icon-1024.png            # high-resolution icon
 │   ├── screenshot.png
 │   ├── screenshot-guilds.png
 │   ├── screenshot-strategy.png

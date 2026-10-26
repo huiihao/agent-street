@@ -890,10 +890,12 @@ export class Town3D {
   _buildStreetFurniture() {
     // Lamps at road intersections; only a few cast real light for performance.
     const lampSpots = [
-      [-0.5, 4], [3.5, 4], [8.5, 4], [13.5, 4],
-      [-3.5, 12], [8.5, 12], [2.5, 8], [10.5, 8],
+      [0.5, 4], [3.5, 4], [8.5, 4], [13.5, 4],
+      [1.5, 12], [8.5, 12], [2.5, 8], [10.5, 8],
     ];
     lampSpots.forEach(([tx, ty], index) => {
+      // Never let a street lamp float off the diorama slab.
+      if (tx < 0 || tx > MAP_W - 1 || ty < 0 || ty > MAP_H - 1) return;
       const { x, z } = tileToWorld(tx, ty);
       const group = new THREE.Group();
       const pole = new THREE.Mesh(

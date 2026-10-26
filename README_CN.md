@@ -8,6 +8,10 @@
 
 </div>
 
+<p align="center">
+  <img src="docs/icon.png" width="112" height="112" alt="Agent Street icon">
+</p>
+
 <h1 align="center">AGENT STREET</h1>
 
 <p align="center">
@@ -27,8 +31,8 @@
 
 ![Agent Street](docs/screenshot.png)
 
-<p align="center"><sub>黄昏中的小镇。选中的交易员打开 <b>Strategy</b> 标签，展示经过 16 代
-实盘交易后漂移到 33% 均值回归权重的策略基因组。</sub></p>
+<p align="center"><sub>黄昏中的小镇。选中的交易员打开 <b>Strategy</b> 标签，展示进化后的
+信号基因组与公会谱系。交易员标签只在悬停/选中时出现；<b>Aa</b> 按钮可切换地点标签。</sub></p>
 
 ---
 
@@ -582,6 +586,7 @@ agent-street/
 │   └── mbti/                    # 人格定义与策略先验
 ├── frontend/
 │   ├── index.html
+│   ├── assets/                  # icon.svg / icon-192 / icon-512
 │   ├── css/style.css
 │   ├── js/
 │   │   ├── main.js              # 启动、WebSocket、控制
@@ -620,6 +625,9 @@ agent-street/
 │   ├── README.md                # 编译 / arXiv 说明
 │   └── figures/
 ├── docs/
+│   ├── icon.svg                 # project icon (vector)
+│   ├── icon.png                 # 512px icon
+│   ├── icon-1024.png            # high-resolution icon
 │   ├── screenshot.png
 │   ├── screenshot-guilds.png
 │   ├── screenshot-strategy.png
