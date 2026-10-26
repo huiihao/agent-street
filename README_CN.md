@@ -9,7 +9,7 @@
 </div>
 
 <p align="center">
-  <img src="docs/icon.png" width="112" height="112" alt="Agent Street icon">
+  <img src="docs/icon-224.png" width="112" height="112" alt="Agent Street icon">
 </p>
 
 <h1 align="center">AGENT STREET</h1>
@@ -627,6 +627,7 @@ agent-street/
 ├── docs/
 │   ├── icon.svg                 # project icon (vector)
 │   ├── icon.png                 # 512px icon
+│   ├── icon-224.png             # 2x README icon
 │   ├── icon-1024.png            # high-resolution icon
 │   ├── screenshot.png
 │   ├── screenshot-guilds.png
