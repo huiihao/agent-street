@@ -34,6 +34,12 @@
 <p align="center"><sub>黄昏中的小镇。选中的交易员打开 <b>Strategy</b> 标签，展示进化后的
 信号基因组与公会谱系。交易员标签只在悬停/选中时出现；<b>Aa</b> 按钮可切换地点标签。</sub></p>
 
+<p align="center">
+  <img src="docs/agent-street-intro.gif" alt="Agent Street 10 秒开场动画" width="880">
+</p>
+
+<p align="center"><sub>10 秒项目开场动画 · <a href="docs/agent-street-intro.mp4">观看 1080p MP4</a></sub></p>
+
 ---
 
 ## 目录
@@ -631,6 +637,8 @@ agent-street/
 │   ├── icon-1024.png            # high-resolution icon
 │   ├── screenshot.png
 │   ├── screenshot-guilds.png
+│   ├── agent-street-intro.gif  # README intro animation
+│   ├── agent-street-intro.mp4  # 1080p intro
 │   ├── screenshot-strategy.png
 │   └── screenshot.gif
 ├── requirements.txt

@@ -36,6 +36,12 @@
 evolved signal genome and guild lineage. Trader labels appear only on hover/selection; the <b>Aa</b>
 button toggles the landmark labels.</sub></p>
 
+<p align="center">
+  <img src="docs/agent-street-intro.gif" alt="Agent Street 10-second intro" width="880">
+</p>
+
+<p align="center"><sub>10-second project intro · <a href="docs/agent-street-intro.mp4">watch the 1080p MP4</a></sub></p>
+
 ---
 
 ## Table of contents
@@ -681,6 +687,8 @@ agent-street/
 │   ├── icon-1024.png            # high-resolution icon
 │   ├── screenshot.png
 │   ├── screenshot-guilds.png
+│   ├── agent-street-intro.gif  # README intro animation
+│   ├── agent-street-intro.mp4  # 1080p intro
 │   ├── screenshot-strategy.png
 │   └── screenshot.gif
 ├── requirements.txt
