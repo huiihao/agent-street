@@ -9,7 +9,7 @@
 </div>
 
 <p align="center">
-  <img src="docs/icon-224.png" width="112" height="112" alt="Agent Street K 线图标">
+  <img src="docs/icon-224.png" width="112" height="112" alt="Agent Street 磨砂玻璃 K 线街门图标">
 </p>
 
 <h1 align="center">AGENT STREET</h1>

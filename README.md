@@ -9,7 +9,7 @@
 </div>
 
 <p align="center">
-  <img src="docs/icon-224.png" width="112" height="112" alt="Agent Street candlestick icon">
+  <img src="docs/icon-224.png" width="112" height="112" alt="Agent Street frosted-glass candlestick gate icon">
 </p>
 
 <h1 align="center">AGENT STREET</h1>

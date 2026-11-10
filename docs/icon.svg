@@ -1,171 +1,191 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Agent Street frosted glass candlestick icon">
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Agent Street frosted glass candlestick gate icon">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#06101c"/>
-      <stop offset="0.55" stop-color="#0a1d31"/>
-      <stop offset="1" stop-color="#12304a"/>
+      <stop offset="0" stop-color="#040c16"/>
+      <stop offset="0.52" stop-color="#081a2a"/>
+      <stop offset="1" stop-color="#102d44"/>
     </linearGradient>
-    <radialGradient id="greenGlow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#45d08a" stop-opacity="0.48"/>
-      <stop offset="1" stop-color="#45d08a" stop-opacity="0"/>
+    <radialGradient id="amber" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#f0b43a" stop-opacity="0.46"/>
+      <stop offset="1" stop-color="#f0b43a" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="amberGlow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#f0b429" stop-opacity="0.46"/>
-      <stop offset="1" stop-color="#f0b429" stop-opacity="0"/>
+    <radialGradient id="cyan" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#56c9ee" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#56c9ee" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="cyanGlow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#5ad1ff" stop-opacity="0.48"/>
-      <stop offset="1" stop-color="#5ad1ff" stop-opacity="0"/>
+    <radialGradient id="green" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#33c583" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#33c583" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="redGlow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#ff6b5e" stop-opacity="0.30"/>
-      <stop offset="1" stop-color="#ff6b5e" stop-opacity="0"/>
+    <radialGradient id="lamp" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffd98a" stop-opacity="0.38"/>
+      <stop offset="0.34" stop-color="#ffd98a" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#ffd98a" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.20"/>
-      <stop offset="0.38" stop-color="#ffffff" stop-opacity="0.07"/>
-      <stop offset="0.68" stop-color="#ffffff" stop-opacity="0.035"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0.11"/>
+    <linearGradient id="pane" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.15"/>
+      <stop offset="0.46" stop-color="#ffffff" stop-opacity="0.04"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.09"/>
+    </linearGradient>
+    <linearGradient id="greenBody" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#08422f"/>
+      <stop offset="0.10" stop-color="#126b4e"/>
+      <stop offset="0.30" stop-color="#2f9b70"/>
+      <stop offset="0.48" stop-color="#79d9ab"/>
+      <stop offset="0.60" stop-color="#4bb887"/>
+      <stop offset="0.80" stop-color="#1b815d"/>
+      <stop offset="1" stop-color="#063c2b"/>
+    </linearGradient>
+    <linearGradient id="redBody" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5e1b18"/>
+      <stop offset="0.12" stop-color="#96312a"/>
+      <stop offset="0.34" stop-color="#c95b4f"/>
+      <stop offset="0.48" stop-color="#e9a197"/>
+      <stop offset="0.62" stop-color="#d76e60"/>
+      <stop offset="0.84" stop-color="#a83930"/>
+      <stop offset="1" stop-color="#5c1a16"/>
+    </linearGradient>
+    <linearGradient id="bodyV" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="0.08" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.86" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.44"/>
+    </linearGradient>
+    <linearGradient id="greenSide" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#053d2d" stop-opacity="0"/>
+      <stop offset="1" stop-color="#032f24" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="redSide" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4a1714" stop-opacity="0"/>
+      <stop offset="1" stop-color="#3f120f" stop-opacity="0.65"/>
+    </linearGradient>
+    <linearGradient id="pathGrad" x1="150" y1="386" x2="362" y2="170" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f0c15a" stop-opacity="0.78"/>
+      <stop offset="0.52" stop-color="#f0c15a" stop-opacity="0.60"/>
+      <stop offset="1" stop-color="#f0c15a" stop-opacity="0.34"/>
     </linearGradient>
     <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.80"/>
-      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.18"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0.45"/>
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.90"/>
+      <stop offset="0.4" stop-color="#ffffff" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#f0c15a" stop-opacity="0.44"/>
     </linearGradient>
-    <linearGradient id="greenBody" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#8ff0bd" stop-opacity="0.98"/>
-      <stop offset="1" stop-color="#20b875" stop-opacity="0.94"/>
-    </linearGradient>
-    <linearGradient id="redBody" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ff9d90" stop-opacity="0.98"/>
-      <stop offset="1" stop-color="#d64a3e" stop-opacity="0.94"/>
-    </linearGradient>
-    <linearGradient id="street" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3e8d6a" stop-opacity="0.88"/>
-      <stop offset="1" stop-color="#164a38" stop-opacity="0.94"/>
-    </linearGradient>
-    <linearGradient id="outerRim" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#f0c15a" stop-opacity="0.80"/>
-      <stop offset="0.5" stop-color="#7fb8d6" stop-opacity="0.30"/>
-      <stop offset="1" stop-color="#f0b429" stop-opacity="0.60"/>
-    </linearGradient>
-    <filter id="blurXL" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="58"/>
-    </filter>
-    <filter id="blurM" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="22"/>
-    </filter>
-    <filter id="panelShadow" x="-30%" y="-30%" width="160%" height="180%">
-      <feDropShadow dx="0" dy="20" stdDeviation="26" flood-color="#000000" flood-opacity="0.46"/>
-    </filter>
-    <filter id="candleShadow" x="-50%" y="-40%" width="200%" height="200%">
-      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity="0.32"/>
-    </filter>
-    <filter id="priceGlow" x="-180%" y="-180%" width="460%" height="460%">
-      <feGaussianBlur stdDeviation="7"/>
+    <filter id="blurXL" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="60"/></filter>
+    <filter id="blurM" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="22"/></filter>
+    <filter id="blurS" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="7"/></filter>
+    <filter id="bodyGlow" x="-120%" y="-40%" width="340%" height="180%"><feGaussianBlur stdDeviation="26"/></filter>
+    <filter id="shadow" x="-60%" y="-30%" width="220%" height="190%"><feDropShadow dx="0" dy="15" stdDeviation="15" flood-color="#000000" flood-opacity="0.38"/></filter>
+    <filter id="glow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="9"/></filter>
+    <filter id="frostNoise" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="1.15" numOctaves="2" seed="11" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="table" tableValues="0 0.17"/></feComponentTransfer>
     </filter>
     <filter id="noise" x="0" y="0" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="14" stitchTiles="stitch"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.82" numOctaves="2" seed="43" stitchTiles="stitch"/>
       <feColorMatrix type="saturate" values="0"/>
-      <feComponentTransfer>
-        <feFuncA type="table" tableValues="0 0.12"/>
-      </feComponentTransfer>
+      <feComponentTransfer><feFuncA type="table" tableValues="0 0.08"/></feComponentTransfer>
     </filter>
-    <clipPath id="outerClip">
-      <rect width="512" height="512" rx="112"/>
-    </clipPath>
-    <clipPath id="panelClip">
-      <rect x="34" y="34" width="444" height="444" rx="92"/>
-    </clipPath>
+    <clipPath id="round"><rect width="512" height="512" rx="112"/></clipPath>
+    <clipPath id="greenClip"><rect x="324" y="170" width="76" height="216" rx="10"/></clipPath>
+    <clipPath id="redClip"><rect x="112" y="258" width="76" height="128" rx="10"/></clipPath>
   </defs>
-
-  <g clip-path="url(#outerClip)">
+  <g clip-path="url(#round)">
     <rect width="512" height="512" fill="url(#bg)"/>
-
-    <!-- blurred market light behind the glass -->
     <g filter="url(#blurXL)">
-      <ellipse cx="140" cy="110" rx="180" ry="150" fill="url(#amberGlow)"/>
-      <ellipse cx="420" cy="260" rx="180" ry="180" fill="url(#cyanGlow)"/>
-      <ellipse cx="210" cy="452" rx="220" ry="130" fill="url(#greenGlow)"/>
-      <ellipse cx="120" cy="350" rx="130" ry="130" fill="url(#redGlow)"/>
+      <ellipse cx="104" cy="250" rx="210" ry="250" fill="url(#amber)"/>
+      <ellipse cx="438" cy="290" rx="200" ry="220" fill="url(#cyan)"/>
+      <ellipse cx="280" cy="480" rx="230" ry="140" fill="url(#green)"/>
+    </g>
+    <rect width="512" height="512" fill="url(#pane)"/>
+    <rect x="2" y="2" width="508" height="508" rx="110" fill="none" stroke="url(#rim)" stroke-width="2"/>
+    <ellipse cx="102" cy="88" rx="118" ry="23" fill="#ffffff" opacity="0.07" transform="rotate(-14 102 88)" filter="url(#blurM)"/>
+    <rect width="512" height="512" filter="url(#noise)" opacity="0.55"/>
+
+    <!-- street -->
+    <path d="M58 422 H454" stroke="#ffffff" stroke-opacity="0.30" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M88 438 H424" stroke="#f0c15a" stroke-opacity="0.30" stroke-width="1.2" stroke-dasharray="14 11" stroke-linecap="round"/>
+
+    <!-- central street warmth -->
+    <circle cx="268" cy="342" r="112" fill="url(#lamp)"/>
+
+    <!-- right green candle (tall) -->
+    <g transform="translate(212,0)">
+    <g filter="url(#shadow)">
+      <path d="M150 132 V170" stroke="#f2c15e" stroke-width="6" stroke-linecap="round"/>
+      <path d="M150 134 V168" stroke="#ffe7a6" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+      <path d="M150 386 V422" stroke="#e4ad42" stroke-width="5.5" stroke-linecap="round"/>
+      <path d="M150 388 V420" stroke="#ffe0a0" stroke-width="1.8" stroke-linecap="round" opacity="0.72"/>
+      <rect x="112" y="170" width="76" height="216" rx="10" fill="url(#greenBody)"/>
+      <g clip-path="url(#greenClip)">
+        <rect x="112" y="170" width="76" height="216" fill="url(#bodyV)"/>
+        <rect x="172" y="170" width="16" height="216" fill="url(#greenSide)"/>
+        <ellipse cx="143" cy="270" rx="22" ry="102" fill="#b8ffd8" opacity="0.18" filter="url(#blurM)"/>
+        <path d="M117 184 V374" stroke="#f2c15e" stroke-opacity="0.34" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M180 184 V374" stroke="#052d22" stroke-opacity="0.48" stroke-width="2" stroke-linecap="round"/>
+        <path d="M122 376 H178" stroke="#032d22" stroke-opacity="0.40" stroke-width="12" stroke-linecap="round"/>
+        <rect x="112" y="170" width="76" height="216" filter="url(#frostNoise)" opacity="0.65"/>
+        <ellipse cx="132" cy="192" rx="13" ry="26" fill="#ffffff" opacity="0.14" filter="url(#blurS)"/>
+        <ellipse cx="137" cy="205" rx="8" ry="18" fill="#ffffff" opacity="0.08" filter="url(#blurS)"/>
+      </g>
+      <rect x="112.9" y="170.9" width="74.2" height="214.2" rx="9.2" fill="none" stroke="#ffffff" stroke-opacity="0.34" stroke-width="1.2"/>
+      <path d="M112 182 Q150 172 188 182" fill="none" stroke="#ffe7a6" stroke-opacity="0.16" stroke-width="1.2"/>
+      <path d="M122 386 H178" stroke="#063a2b" stroke-opacity="0.36" stroke-width="8" stroke-linecap="round"/>
+    </g>
     </g>
 
-    <!-- frosted pane -->
-    <rect x="34" y="34" width="444" height="444" rx="92" fill="url(#glass)" filter="url(#panelShadow)"/>
-    <rect x="34" y="34" width="444" height="444" rx="92" fill="none" stroke="url(#rim)" stroke-width="1.8"/>
-
-    <g clip-path="url(#panelClip)">
-      <ellipse cx="118" cy="106" rx="146" ry="100" fill="#ffffff" opacity="0.08" filter="url(#blurM)"/>
-      <ellipse cx="416" cy="408" rx="150" ry="100" fill="#5ad1ff" opacity="0.04" filter="url(#blurM)"/>
-      <rect x="34" y="34" width="444" height="444" filter="url(#noise)" opacity="0.50"/>
-
-      <!-- diffuse corner glint (no horizon-like arc) -->
-      <ellipse cx="118" cy="116" rx="78" ry="16" fill="#ffffff" opacity="0.09" transform="rotate(-16 118 116)" filter="url(#blurM)"/>
-      <ellipse cx="420" cy="398" rx="90" ry="18" fill="#5ad1ff" opacity="0.05" transform="rotate(-12 420 398)" filter="url(#blurM)"/>
-
-      <!-- faint chart grid -->
-      <g stroke="#ffffff" stroke-opacity="0.075" stroke-width="1">
-        <path d="M100 220 H416"/>
-        <path d="M100 286 H416"/>
-        <path d="M100 352 H416"/>
-        <path d="M180 180 V386"/>
-        <path d="M270 180 V386"/>
-        <path d="M360 180 V386"/>
+    <!-- left red candle (short) -->
+    <g transform="translate(-212,0)">
+    <g filter="url(#shadow)">
+      <path d="M362 220 V258" stroke="#f2c15e" stroke-width="6" stroke-linecap="round"/>
+      <path d="M362 222 V256" stroke="#ffe7a6" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+      <path d="M362 386 V422" stroke="#e4ad42" stroke-width="5.5" stroke-linecap="round"/>
+      <path d="M362 388 V420" stroke="#ffe0a0" stroke-width="1.8" stroke-linecap="round" opacity="0.72"/>
+      <rect x="324" y="258" width="76" height="128" rx="10" fill="url(#redBody)"/>
+      <g clip-path="url(#redClip)">
+        <rect x="324" y="258" width="76" height="128" fill="url(#bodyV)"/>
+        <rect x="384" y="258" width="16" height="128" fill="url(#redSide)"/>
+        <path d="M341 268 V374" stroke="#ffffff" stroke-opacity="0.20" stroke-width="2.0" stroke-linecap="round"/>
+        <path d="M329 272 V370" stroke="#f2c15e" stroke-opacity="0.44" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M392 272 V370" stroke="#3f120f" stroke-opacity="0.50" stroke-width="2" stroke-linecap="round"/>
+        <path d="M334 376 H390" stroke="#3f120f" stroke-opacity="0.36" stroke-width="10" stroke-linecap="round"/>
+        <ellipse cx="342" cy="272" rx="10" ry="4" fill="#ffffff" opacity="0.24" filter="url(#blurS)"/>
       </g>
+      <rect x="324.9" y="258.9" width="74.2" height="126.2" rx="9.2" fill="none" stroke="#ffffff" stroke-opacity="0.34" stroke-width="1.2"/>
+      <path d="M324 270 Q362 260 400 270" fill="none" stroke="#ffe7a6" stroke-opacity="0.15" stroke-width="1.2"/>
+      <path d="M334 386 H390" stroke="#3f120f" stroke-opacity="0.34" stroke-width="8" stroke-linecap="round"/>
+    </g>
+    </g>
 
-      <!-- street / chart baseline -->
-      <path d="M92 388 H428" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1.5" stroke-linecap="round"/>
-      <g stroke="#ffffff" stroke-opacity="0.24" stroke-width="1.2" stroke-linecap="round">
-        <path d="M141 388 V395"/>
-        <path d="M231 388 V395"/>
-        <path d="M321 388 V395"/>
-        <path d="M411 388 V395"/>
+    <!-- close path: red close at street level to green close at the top -->
+    <path d="M150 386 Q256 306 362 170" fill="none" stroke="url(#pathGrad)" stroke-width="2.4" stroke-linecap="round"/>
+    <circle cx="150" cy="386" r="3" fill="#f0c15a" opacity="0.75"/>
+    <circle cx="362" cy="170" r="12" fill="#f0c15a" opacity="0.26" filter="url(#glow)"/>
+    <circle cx="362" cy="170" r="4.2" fill="#fff1c2"/>
+
+    <!-- agents walking between the candles -->
+    <g>
+      <g transform="translate(238 398)">
+        <ellipse cx="0" cy="21" rx="11" ry="1.7" fill="#ffe9b8" opacity="0.17"/>
+        <g fill="#ffe9b8">
+          <circle cx="0" cy="0" r="3.8"/>
+          <path d="M-3.3 4.7 Q0 3.4 3.3 4.7 L2.45 12.1 L-2.45 12.1 Z"/>
+        </g>
+        <path d="M-1.75 11.7 L-2.8 19 M1.75 11.7 L2.8 19" stroke="#ffe9b8" stroke-width="2.1" stroke-linecap="round" opacity="0.96"/>
       </g>
-
-      <!-- glass street base -->
-      <rect x="88" y="402" width="336" height="38" rx="19" fill="url(#street)" stroke="#ffffff" stroke-opacity="0.28" stroke-width="1.3"/>
-      <path d="M126 421 H386" stroke="#f0c15a" stroke-opacity="0.48" stroke-width="1.4" stroke-dasharray="10 9" stroke-linecap="round"/>
-      <path d="M108 409 H394" stroke="#c7f6ff" stroke-opacity="0.20" stroke-width="1" stroke-linecap="round"/>
-
-      <!-- close-price trend line (behind bodies) -->
-      <path d="M141 310 L231 258 L321 282 L411 190"
-            fill="none" stroke="#f0c15a" stroke-opacity="0.88" stroke-width="4"
-            stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="411" cy="190" r="12" fill="#f0c15a" opacity="0.28" filter="url(#priceGlow)"/>
-      <circle cx="411" cy="190" r="4.5" fill="#ffe6a4"/>
-
-      <!-- candlesticks -->
-      <g filter="url(#candleShadow)">
-        <!-- candle 1: red -->
-        <path d="M141 292 V388" stroke="#ffb8ae" stroke-opacity="0.90" stroke-width="4" stroke-linecap="round"/>
-        <rect x="120" y="310" width="42" height="62" rx="7" fill="url(#redBody)" stroke="#ffffff" stroke-opacity="0.42" stroke-width="1.2"/>
-        <path d="M128 318 H154" stroke="#ffffff" stroke-opacity="0.36" stroke-width="1.2" stroke-linecap="round"/>
-
-        <!-- candle 2: green -->
-        <path d="M231 238 V364" stroke="#b8ffe0" stroke-opacity="0.90" stroke-width="4" stroke-linecap="round"/>
-        <rect x="210" y="258" width="42" height="88" rx="7" fill="url(#greenBody)" stroke="#ffffff" stroke-opacity="0.42" stroke-width="1.2"/>
-        <path d="M218 266 H246" stroke="#ffffff" stroke-opacity="0.38" stroke-width="1.2" stroke-linecap="round"/>
-
-        <!-- candle 3: red pullback -->
-        <path d="M321 262 V360" stroke="#ffb8ae" stroke-opacity="0.90" stroke-width="4" stroke-linecap="round"/>
-        <rect x="300" y="282" width="42" height="64" rx="7" fill="url(#redBody)" stroke="#ffffff" stroke-opacity="0.42" stroke-width="1.2"/>
-        <path d="M308 290 H334" stroke="#ffffff" stroke-opacity="0.36" stroke-width="1.2" stroke-linecap="round"/>
-
-        <!-- candle 4: green breakout -->
-        <path d="M411 168 V328" stroke="#b8ffe0" stroke-opacity="0.90" stroke-width="4" stroke-linecap="round"/>
-        <rect x="390" y="190" width="42" height="120" rx="7" fill="url(#greenBody)" stroke="#ffffff" stroke-opacity="0.42" stroke-width="1.2"/>
-        <path d="M398 198 H426" stroke="#ffffff" stroke-opacity="0.38" stroke-width="1.2" stroke-linecap="round"/>
-      </g>
-
-      <!-- compact price marker -->
-      <g>
-        <rect x="358" y="126" width="74" height="30" rx="15" fill="#101f30" fill-opacity="0.82" stroke="#f0c15a" stroke-opacity="0.46" stroke-width="1"/>
-        <path d="M372 141 L380 149 L392 133" fill="none" stroke="#8ff0bd" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="414" cy="141" r="3" fill="#f0c15a" opacity="0.85"/>
+      <g transform="translate(284 401) scale(.86)">
+        <ellipse cx="0" cy="21" rx="11" ry="1.7" fill="#d8f7e8" opacity="0.13"/>
+        <g fill="#d8f7e8" opacity="0.9">
+          <circle cx="0" cy="0" r="3.8"/>
+          <path d="M-3.3 4.7 Q0 3.4 3.3 4.7 L2.45 12.1 L-2.45 12.1 Z"/>
+        </g>
+        <path d="M-1.75 11.7 L-2.8 19 M1.75 11.7 L2.8 19" stroke="#d8f7e8" stroke-width="2.1" stroke-linecap="round" opacity="0.88"/>
       </g>
     </g>
 
-    <!-- outer glass edge -->
-    <rect x="2.5" y="2.5" width="507" height="507" rx="112" fill="none" stroke="url(#outerRim)" stroke-width="2"/>
+    <!-- pooled light and reflections on the street -->
+    <ellipse cx="262" cy="424" rx="70" ry="4" fill="#ffe0a0" opacity="0.13" filter="url(#blurS)"/>
+    <rect x="122" y="424" width="56" height="28" rx="26" fill="#e45a4b" opacity="0.075" filter="url(#blurM)"/>
+    <rect x="334" y="424" width="56" height="36" rx="28" fill="#37cf8a" opacity="0.085" filter="url(#blurM)"/>
+    <rect x="210" y="424" width="116" height="34" rx="30" fill="#ffcf7a" opacity="0.045" filter="url(#blurM)"/>
   </g>
 </svg>
