@@ -542,6 +542,13 @@ curl -X PUT http://localhost:8766/api/interaction/rules \
 curl -X POST http://localhost:8766/api/interaction/rules/reset
 ```
 
+应用内置了 **Rulebook** 面板（顶栏 **Rules** 按钮）：可视化控件表单 + Raw JSON
+编辑器，支持保存、重置、校验和实时 LLM 状态；底层使用上面列出的规则接口。
+
+<p align="center">
+  <img src="docs/screenshot-rules.png" width="860" alt="Rulebook 面板：对话、场景偏置、反思和交易规则">
+</p>
+
 更新会先校验再持久化。对话、反思和交易规则立即生效；日程规则在 reset 后生效，
 因为角色可能正在走一条路径。显式环境变量仍然覆盖 JSON（便于 CI / 消融实验），
 也可以用 `INTERACTION_RULES_PATH` 指向另一份规则文件。
@@ -665,9 +672,12 @@ agent-street/
 ├── frontend/
 │   ├── index.html
 │   ├── assets/                  # icon.svg / icon-192 / icon-512
-│   ├── css/style.css
+│   ├── css/
+│   │   ├── style.css
+│   │   └── rules-panel.css      # Rulebook 面板样式
 │   ├── js/
 │   │   ├── main.js              # 启动、WebSocket、控制
+│   │   ├── rules_panel.js       # Rulebook 表单 + Raw JSON 编辑器
 │   │   ├── town3d.js            # 3D 小镇 + 角色 + 昼夜
 │   │   ├── market_chart.js      # K 线 / 对比 / Guilds / tooltip
 │   │   ├── leaderboard.js       # DOM 排行榜 + 公会代码
@@ -711,6 +721,7 @@ agent-street/
 │   ├── icon-224.png             # 2x README icon
 │   ├── icon-1024.png            # high-resolution icon
 │   ├── screenshot.png
+│   ├── screenshot-rules.png     # Rulebook 面板
 │   ├── screenshot-guilds.png
 │   ├── agent-street-intro.gif  # README intro animation
 │   ├── agent-street-intro.mp4  # 1080p intro

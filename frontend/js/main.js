@@ -4,6 +4,7 @@ import { AgentDetail } from './agent_detail.js';
 import { Leaderboard } from './leaderboard.js';
 import { MarketChart } from './market_chart.js';
 import { ObserverReports } from './observer_reports.js';
+import { RulesPanel } from './rules_panel.js';
 import { Town3D } from './town3d.js';
 import { TradeFeed } from './trade_feed.js';
 import { WSClient } from './ws_client.js';
@@ -44,6 +45,7 @@ const els = {
   btnStart: $('btn-start'),
   btnStop: $('btn-stop'),
   btnReset: $('btn-reset'),
+  btnRules: $('btn-rules'),
   btnStartOverlay: $('btn-start-overlay'),
   speedBtn: $('speed-btn'),
   btnCamera: $('btn-camera'),
@@ -71,6 +73,7 @@ let leaderboard = null;
 let tradeFeed = null;
 let agentDetail = null;
 let observers = null;
+let rulesPanel = null;
 
 let lastTick = -1;
 let lastFrame = null;
@@ -85,6 +88,7 @@ init();
 
 function init() {
   bindControls();
+  rulesPanel = new RulesPanel({ trigger: els.btnRules, onToast: showToast });
   boot();
   ws.on('hello', (data) => {
     if (data?.status) applyStatus(data.status);
@@ -166,6 +170,7 @@ function createComponents(data) {
       get chart() { return chart; },
       get frame() { return lastFrame; },
       get ws() { return ws; },
+      get rules() { return rulesPanel; },
     };
   }
 }
@@ -401,6 +406,7 @@ function bindControls() {
 
   els.speedBtn.textContent = `${currentSpeed}×`;
   document.addEventListener('keydown', (event) => {
+    if (document.body.classList.contains('rules-open')) return;
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
     if (event.target instanceof HTMLButtonElement) return;
     if (event.code === 'Space') {

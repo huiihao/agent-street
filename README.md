@@ -592,6 +592,14 @@ curl -X PUT http://localhost:8766/api/interaction/rules \
 curl -X POST http://localhost:8766/api/interaction/rules/reset
 ```
 
+The app also ships a **Rulebook** dialog (the **Rules** button in the top bar):
+a visual controls form plus a raw-JSON editor, with save, reset, validation and
+live LLM status. It talks to the rules API shown above.
+
+<p align="center">
+  <img src="docs/screenshot-rules.png" width="860" alt="The Rulebook panel with conversation, scene bias, reflection and trading controls">
+</p>
+
 Updates are validated and persisted. Conversation, reflection and trading rules
 apply live; routine changes apply after a reset because an agent may be midway
 through a path. Explicit environment variables still override the JSON (handy
@@ -723,9 +731,12 @@ agent-street/
 ├── frontend/
 │   ├── index.html
 │   ├── assets/                  # icon.svg / icon-192 / icon-512
-│   ├── css/style.css
+│   ├── css/
+│   │   ├── style.css
+│   │   └── rules-panel.css      # Rulebook dialog styling
 │   ├── js/
 │   │   ├── main.js              # bootstrap, WebSocket, controls
+│   │   ├── rules_panel.js       # Rulebook form + raw JSON editor
 │   │   ├── town3d.js            # Three.js diorama + agents + lighting
 │   │   ├── market_chart.js      # candles / compare / guilds / tooltips
 │   │   ├── leaderboard.js       # DOM leaderboard + guild codes
@@ -769,6 +780,7 @@ agent-street/
 │   ├── icon-224.png             # 2x README icon
 │   ├── icon-1024.png            # high-resolution icon
 │   ├── screenshot.png
+│   ├── screenshot-rules.png     # Rulebook dialog
 │   ├── screenshot-guilds.png
 │   ├── agent-street-intro.gif  # README intro animation
 │   ├── agent-street-intro.mp4  # 1080p intro

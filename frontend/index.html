@@ -18,6 +18,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Sora:wght@400;500;600;700&family=Unbounded:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/rules-panel.css">
 </head>
 <body>
 <div class="app">
@@ -42,6 +43,15 @@
       <button id="btn-start" class="btn btn-primary" type="button">Start</button>
       <button id="btn-stop" class="btn" type="button" disabled>Stop</button>
       <button id="btn-reset" class="btn btn-ghost" type="button">Reset</button>
+      <button id="btn-rules" class="btn btn-ghost btn-rules" type="button" aria-label="Edit interaction rules" aria-haspopup="dialog" aria-controls="rules-overlay" title="Edit interaction rules">
+        <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round">
+          <path d="M2.5 4.2h11M2.5 8h11M2.5 11.8h11"/>
+          <circle cx="6.1" cy="4.2" r="1.25" fill="rgba(8,14,24,.95)"/>
+          <circle cx="10.2" cy="8" r="1.25" fill="rgba(8,14,24,.95)"/>
+          <circle cx="4.4" cy="11.8" r="1.25" fill="rgba(8,14,24,.95)"/>
+        </svg>
+        <span class="btn-rules-label">Rules</span>
+      </button>
       <button id="speed-btn" class="btn btn-ghost mono" type="button" title="Cycle simulation speed">1×</button>
     </div>
   </header>
@@ -168,6 +178,248 @@
     </div>
     <div class="status-warning" id="status-warning" hidden></div>
   </footer>
+</div>
+
+<div id="rules-overlay" class="rules-overlay" hidden>
+  <div class="rules-backdrop" data-rules-close></div>
+  <section id="rules-panel" class="rules-panel" role="dialog" aria-modal="true" aria-labelledby="rules-title" aria-describedby="rules-description" tabindex="-1">
+    <aside class="rules-spine">
+      <div class="rules-spine-head">
+        <span class="eyebrow">Field manual · 01</span>
+        <h2 id="rules-title">Rulebook</h2>
+        <p id="rules-description">Tune how the street talks, moves and trades. The default path is entirely rule-based.</p>
+      </div>
+
+      <nav class="rules-tabs" role="tablist" aria-label="Rulebook views">
+        <button id="rules-tab-controls" class="rules-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="rules-view-controls" data-rules-tab="controls">
+          <span>01</span>Controls
+        </button>
+        <button id="rules-tab-json" class="rules-tab" type="button" role="tab" aria-selected="false" aria-controls="rules-view-json" data-rules-tab="json">
+          <span>02</span>Raw JSON
+        </button>
+      </nav>
+
+      <div class="rules-llm" id="rules-llm">
+        <div class="rules-llm-head">
+          <span class="eyebrow">LLM narrative</span>
+          <span class="rules-llm-state is-off" id="rules-llm-state">off</span>
+        </div>
+        <p class="rules-llm-detail" id="rules-llm-detail">Rule-only · no API spend.</p>
+        <div class="rules-llm-meter" aria-hidden="true"><i id="rules-llm-fill"></i></div>
+        <p class="rules-llm-meta" id="rules-llm-meta">Configured by environment</p>
+      </div>
+
+      <div class="rules-source" id="rules-source" title="Rule file">config/interaction_rules.json</div>
+    </aside>
+
+    <div class="rules-main">
+      <header class="rules-head">
+        <div class="rules-head-copy">
+          <span class="eyebrow">Agent Street / behaviour</span>
+          <h3>Set the defaults. The town does the rest.</h3>
+        </div>
+        <div class="rules-head-actions">
+          <span class="rules-dirty" id="rules-dirty" hidden>Unsaved</span>
+          <button class="rules-close" id="rules-close" type="button" aria-label="Close rulebook" title="Close (Esc)">×</button>
+        </div>
+      </header>
+
+      <div class="rules-body" id="rules-body">
+        <div class="rules-loading" id="rules-loading">
+          <span class="spinner" aria-hidden="true"></span>
+          <p>Loading the rulebook…</p>
+        </div>
+
+        <div class="rules-error" id="rules-error" hidden>
+          <p class="eyebrow">Could not load</p>
+          <p id="rules-error-text">The rules API did not respond.</p>
+          <button class="btn" id="rules-retry" type="button">Retry</button>
+        </div>
+
+        <div class="rules-view" id="rules-view-controls" role="tabpanel" aria-labelledby="rules-tab-controls">
+          <section class="rules-section">
+            <div class="rules-section-head">
+              <span>01</span>
+              <h4>Conversation</h4>
+              <em>agent ↔ agent</em>
+            </div>
+            <div class="rules-grid">
+              <div class="rule-field rule-field--wide">
+                <div class="rule-field-label">
+                  <label for="rule-chance">Conversation chance</label>
+                  <output data-rule-output="conversation.chance">—</output>
+                </div>
+                <input id="rule-chance" type="range" min="0" max="100" step="1" data-rule-path="conversation.chance" data-rule-scale="100" aria-describedby="rule-chance-hint">
+                <p class="rule-hint" id="rule-chance-hint">Base probability per eligible tick; the location bias multiplies it.</p>
+              </div>
+
+              <div class="rule-field">
+                <div class="rule-field-label"><label for="rule-radius">Radius</label><em>tiles</em></div>
+                <div class="rule-number">
+                  <input id="rule-radius" type="number" min="1" max="20" step="1" data-rule-path="conversation.radius" data-rule-type="int">
+                  <span>tiles</span>
+                </div>
+                <p class="rule-hint">Who counts as a neighbour.</p>
+              </div>
+
+              <div class="rule-field">
+                <div class="rule-field-label"><label for="rule-cooldown">Cooldown</label><em>ticks</em></div>
+                <div class="rule-number">
+                  <input id="rule-cooldown" type="number" min="0" max="1000" step="1" data-rule-path="conversation.cooldown_ticks" data-rule-type="int">
+                  <span>ticks</span>
+                </div>
+                <p class="rule-hint">Silence after a conversation.</p>
+              </div>
+
+              <div class="rule-field">
+                <div class="rule-field-label"><label for="rule-max-conv">Max per tick</label><em>conversations</em></div>
+                <div class="rule-number">
+                  <input id="rule-max-conv" type="number" min="0" max="20" step="1" data-rule-path="conversation.max_per_tick" data-rule-type="int">
+                  <span>convos</span>
+                </div>
+                <p class="rule-hint">A hard ceiling for the whole town.</p>
+              </div>
+
+              <div class="rule-field rule-field--wide">
+                <div class="rule-field-label">
+                  <label for="rule-debate">Debate chance</label>
+                  <output data-rule-output="conversation.debate_chance">—</output>
+                </div>
+                <input id="rule-debate" type="range" min="0" max="100" step="1" data-rule-path="conversation.debate_chance" data-rule-scale="100">
+                <p class="rule-hint">Occasional bull/bear exchange after a conversation.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="rules-section">
+            <div class="rules-section-head">
+              <span>02</span>
+              <h4>Scene bias</h4>
+              <em>location multiplier</em>
+            </div>
+            <div class="rules-grid">
+              <div class="rule-field rule-field--wide">
+                <div class="rule-field-label"><span>Where the town talks</span><em>× base chance</em></div>
+                <div class="rule-location-grid">
+                  <label for="rule-loc-cafe">Cafe
+                    <input id="rule-loc-cafe" type="number" min="0" max="5" step="0.05" data-rule-path="conversation.location_multipliers.cafe">
+                  </label>
+                  <label for="rule-loc-rumor">Rumor Mill
+                    <input id="rule-loc-rumor" type="number" min="0" max="5" step="0.05" data-rule-path="conversation.location_multipliers.rumor">
+                  </label>
+                  <label for="rule-loc-library">Library
+                    <input id="rule-loc-library" type="number" min="0" max="5" step="0.05" data-rule-path="conversation.location_multipliers.library">
+                  </label>
+                  <label for="rule-loc-lab">Quant Lab
+                    <input id="rule-loc-lab" type="number" min="0" max="5" step="0.05" data-rule-path="conversation.location_multipliers.lab">
+                  </label>
+                </div>
+                <p class="rule-hint">1.0 is neutral. Other locations live in Raw JSON.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="rules-section">
+            <div class="rules-section-head">
+              <span>03</span>
+              <h4>Reflection</h4>
+              <em>memory cadence</em>
+            </div>
+            <div class="rules-grid">
+              <div class="rule-field">
+                <div class="rule-field-label"><label for="rule-reflection-every">Every</label><em>ticks</em></div>
+                <div class="rule-number">
+                  <input id="rule-reflection-every" type="number" min="1" max="1000" step="1" data-rule-path="reflection.every_n_ticks" data-rule-type="int">
+                  <span>ticks</span>
+                </div>
+              </div>
+              <div class="rule-field">
+                <div class="rule-field-label"><label for="rule-llm-batch">LLM batch</label><em>reflections</em></div>
+                <div class="rule-number">
+                  <input id="rule-llm-batch" type="number" min="0" max="20" step="1" data-rule-path="reflection.llm_per_batch" data-rule-type="int">
+                  <span>per batch</span>
+                </div>
+              </div>
+              <div class="rule-field rule-field--wide">
+                <div class="rule-field-label">
+                  <label for="rule-importance">Importance threshold</label>
+                  <output data-rule-output="reflection.importance_threshold">—</output>
+                </div>
+                <input id="rule-importance" type="range" min="0" max="100" step="1" data-rule-path="reflection.importance_threshold" data-rule-scale="100">
+                <p class="rule-hint">Only observations above this weight become rule-based reflections.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="rules-section">
+            <div class="rules-section-head">
+              <span>04</span>
+              <h4>Trading</h4>
+              <em>risk envelope</em>
+            </div>
+            <div class="rules-grid">
+              <div class="rule-field">
+                <div class="rule-field-label"><label for="rule-buy">Buy threshold</label><em>signal</em></div>
+                <div class="rule-number">
+                  <input id="rule-buy" type="number" min="0" max="1" step="0.01" data-rule-path="trading.buy_threshold">
+                  <span>≥</span>
+                </div>
+              </div>
+              <div class="rule-field">
+                <div class="rule-field-label"><label for="rule-sell">Sell threshold</label><em>signal</em></div>
+                <div class="rule-number">
+                  <input id="rule-sell" type="number" min="-1" max="0" step="0.01" data-rule-path="trading.sell_threshold">
+                  <span>≤</span>
+                </div>
+              </div>
+              <div class="rule-field rule-field--wide">
+                <div class="rule-field-label">
+                  <label for="rule-position">Max position</label>
+                  <output data-rule-output="trading.max_position_pct">—</output>
+                </div>
+                <input id="rule-position" type="range" min="1" max="100" step="1" data-rule-path="trading.max_position_pct" data-rule-scale="100">
+                <p class="rule-hint">Per-symbol cap before the agent's own risk scaling.</p>
+              </div>
+              <div class="rule-field">
+                <div class="rule-field-label"><label for="rule-panic">Panic cooldown</label><em>ticks</em></div>
+                <div class="rule-number">
+                  <input id="rule-panic" type="number" min="0" max="1000" step="1" data-rule-path="trading.panic_cooldown_ticks" data-rule-type="int">
+                  <span>ticks</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <p class="rules-note"><strong>Advanced</strong> Routines, greeting templates and per-agent overrides (<code>agents.INTJ</code>) are editable in Raw JSON. Environment overrides still win at runtime.</p>
+        </div>
+
+        <div class="rules-view" id="rules-view-json" role="tabpanel" aria-labelledby="rules-tab-json" hidden>
+          <div class="rules-json-bar">
+            <span class="rules-json-state" id="rules-json-state"><i></i>Valid JSON</span>
+            <button class="mini-btn" id="rules-format" type="button">Format</button>
+          </div>
+          <textarea id="rules-json" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Interaction rules JSON"></textarea>
+          <p class="rules-hint rules-hint--json">Advanced: routines, templates and per-agent overrides live here. The server validates before saving.</p>
+        </div>
+      </div>
+
+      <div class="rules-confirm" id="rules-confirm" hidden>
+        <p id="rules-confirm-text">Discard unsaved changes?</p>
+        <div class="rules-confirm-actions">
+          <button class="btn btn-ghost" id="rules-confirm-cancel" type="button">Keep editing</button>
+          <button class="btn btn-danger" id="rules-confirm-ok" type="button">Discard</button>
+        </div>
+      </div>
+
+      <footer class="rules-foot">
+        <div class="rules-status" id="rules-status" aria-live="polite">Synced with rulebook</div>
+        <div class="rules-actions">
+          <button class="btn btn-ghost" id="rules-reset" type="button">Reset defaults</button>
+          <button class="btn btn-primary" id="rules-save" type="button" disabled>Save rules</button>
+        </div>
+      </footer>
+    </div>
+  </section>
 </div>
 
 <div id="toasts" class="toasts" aria-live="polite"></div>
