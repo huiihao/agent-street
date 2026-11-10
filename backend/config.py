@@ -80,15 +80,27 @@ REFLECTION_MAX = _env("REFLECTION_MAX", 40, int)
 PANIC_COOLDOWN_TICKS = _env("PANIC_COOLDOWN_TICKS", 12, int)
 OBSERVER_REPORT_EVERY_N_TICKS = _env("OBSERVER_REPORT_EVERY_N_TICKS", 20, int)
 
-# ── LLM (optional) ───────────────────────────────────────────
+# ── LLM (optional, rule-first) ───────────────────────────────
+# The simulation never needs an LLM. These settings only enable the optional
+# narrative layer; every capability falls back to the rule templates.
 LLM_ENABLED = _env("LLM_ENABLED", "false").lower() in ("1", "true", "yes")
+# off | reflection | conversation | all
+# Empty = derive from LLM_ENABLED / LLM_CONVERSATIONS for backwards compatibility.
+LLM_MODE = _env("LLM_MODE", "").lower()
+# openai | deepseek | ollama | custom. Empty base/model selects a preset.
+LLM_PROVIDER = _env("LLM_PROVIDER", "openai").lower()
 LLM_API_KEY = _env("LLM_API_KEY", "")
-LLM_BASE_URL = _env("LLM_BASE_URL", "https://api.openai.com/v1")
-LLM_MODEL = _env("LLM_MODEL", "gpt-4o-mini")
+LLM_BASE_URL = _env("LLM_BASE_URL", "")
+LLM_MODEL = _env("LLM_MODEL", "")
 LLM_MAX_TOKENS = _env("LLM_MAX_TOKENS", 150, int)
 LLM_TEMPERATURE = _env("LLM_TEMPERATURE", 0.9, float)
 LLM_MAX_CONCURRENCY = _env("LLM_MAX_CONCURRENCY", 2, int)
 LLM_TIMEOUT_SEC = _env("LLM_TIMEOUT_SEC", 10, int)
+# Hard cost guardrails. max_calls=0 means unlimited; the default is deliberately
+# small because each call is optional polish, not a simulation input.
+LLM_MAX_CALLS_PER_RUN = _env("LLM_MAX_CALLS_PER_RUN", 200, int)
+LLM_MAX_INPUT_CHARS = _env("LLM_MAX_INPUT_CHARS", 6000, int)
+LLM_CACHE_SIZE = _env("LLM_CACHE_SIZE", 256, int)
 # Reflections are enriched in the background; this caps how many per batch.
 LLM_REFLECTIONS_PER_BATCH = _env("LLM_REFLECTIONS_PER_BATCH", 2, int)
 LLM_CONVERSATIONS = _env("LLM_CONVERSATIONS", "false").lower() in ("1", "true", "yes")

@@ -4,7 +4,7 @@
 <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
 <img src="https://img.shields.io/badge/agents-20-ff69b4?style=flat-square" alt="Agents">
 <img src="https://img.shields.io/badge/renderer-Three.js%20r160-5ad1ff?style=flat-square" alt="Three.js">
-<img src="https://img.shields.io/badge/tests-21-success?style=flat-square" alt="Tests">
+<img src="https://img.shields.io/badge/tests-40-success?style=flat-square" alt="Tests">
 
 </div>
 
@@ -466,7 +466,8 @@ python -m unittest discover -s tests -v
 
 ## 配置
 
-所有配置均可用环境变量覆盖，默认值在 `backend/config.py`。
+所有配置均可用环境变量覆盖；系统默认值在 `backend/config.py`，交互行为在
+`config/interaction_rules.json`。
 
 | 变量 | 默认 | 含义 |
 |---|---|---|
@@ -485,10 +486,18 @@ python -m unittest discover -s tests -v
 | `SIM_SEED` | `7` | 决策/合成数据随机种子（`0` = 随机） |
 | `ALPHA_VANTAGE_API_KEY` | 空 | 仅在显式数据源时使用 |
 | `IFIND_API_KEY` / `IFIND_API_SECRET` | 空 | 可选机构版同花顺 |
-| `LLM_ENABLED` | `false` | 后台 LLM 反思增强 |
-| `LLM_API_KEY` | 空 | OpenAI 兼容 Key |
-| `LLM_BASE_URL` / `LLM_MODEL` | OpenAI / `gpt-4o-mini` | 任意兼容端点 |
-| `LLM_CONVERSATIONS` | `false` | 是否让 LLM 生成对话 |
+| `LLM_ENABLED` | `false` | 可选叙事层；规则始终可运行 |
+| `LLM_PROVIDER` | `openai` | `openai / deepseek / ollama / custom` |
+| `LLM_MODE` | 空 | `off / reflection / conversation / all`；留空时按旧开关推导 |
+| `LLM_API_KEY` | 空 | 托管模型 Key（Ollama 不需要） |
+| `LLM_BASE_URL` / `LLM_MODEL` | 空 | 留空时使用 provider 预设 |
+| `LLM_MAX_CALLS_PER_RUN` | `200` | 单次运行的硬调用预算；`0` = 不限制 |
+| `LLM_MAX_INPUT_CHARS` | `6000` | 输入长度保护 |
+| `LLM_MAX_TOKENS` / `LLM_TIMEOUT_SEC` | `150` / `10` | 输出上限与请求超时 |
+| `LLM_MAX_CONCURRENCY` | `2` | 并发调用数 |
+| `LLM_CACHE_SIZE` | `256` | 精确 prompt 缓存 |
+| `LLM_CONVERSATIONS` | `false` | 旧开关；建议改用 `LLM_MODE` |
+| `INTERACTION_RULES_PATH` | `config/interaction_rules.json` | 用户可编辑的规则文件 |
 
 ```powershell
 # Windows PowerShell
@@ -502,6 +511,66 @@ python run.py
 # Linux / macOS
 SYMBOLS=AAPL,NVDA,META HIST_INTERVAL=1m python run.py
 ```
+
+### 规则优先的交互与可选 LLM
+
+小镇默认**完全规则驱动**：不需要 API Key，任何一次运行都可复现。对话、日程和交易
+阈值都在 `config/interaction_rules.json` 中；可以直接改 JSON，也可以调用 API。
+
+| 配置段 | 控制内容 |
+|---|---|
+| `conversation` | 对话半径、触发概率、冷却、每 tick 上限、地点倍率、问候/看多/看空/中性模板 |
+| `routines` | 三套日程（`extravert` / `thinking` / `default`）、闲逛概率、感知型停留时长修正 |
+| `trading` | 买入/卖出阈值、单标的仓位上限、恐慌冷却 |
+| `agents` | 单个角色的覆盖规则，例如 `INTJ.conversation.chance` |
+
+```json
+{
+  "conversation": {"chance": 0.22},
+  "agents": {
+    "INTJ": {"conversation": {"chance": 0.08}, "trading": {"buy_threshold": 0.16}}
+  }
+}
+```
+
+```bash
+# 读取 / 更新 / 重置在线规则
+curl http://localhost:8766/api/interaction/rules
+curl -X PUT http://localhost:8766/api/interaction/rules \
+  -H "Content-Type: application/json" \
+  -d '{"conversation":{"chance":0.22}}'
+curl -X POST http://localhost:8766/api/interaction/rules/reset
+```
+
+更新会先校验再持久化。对话、反思和交易规则立即生效；日程规则在 reset 后生效，
+因为角色可能正在走一条路径。显式环境变量仍然覆盖 JSON（便于 CI / 消融实验），
+也可以用 `INTERACTION_RULES_PATH` 指向另一份规则文件。
+
+**可选的 LLM 叙事层。** LLM 只负责语言，不负责下单、不绕过风控、不改变账本。
+需要显式开启：
+
+```powershell
+$env:LLM_ENABLED="true"
+$env:LLM_PROVIDER="deepseek"
+$env:LLM_API_KEY="your-key"
+$env:LLM_MODE="conversation"   # conversation | reflection | all
+python run.py
+```
+
+选择 DeepSeek 时会自动使用 `https://api.deepseek.com/v1` 和 `deepseek-chat`；
+OpenAI、Ollama（无需 Key）以及任意 OpenAI 兼容端点同理。当前开放的能力是
+**对话**与**反思**；交易控制回路保持规则化，以保证低成本、可复现、可做 A/B。
+同一套 provider 接口理论上可以扩展到决策，但应先跑 A/B，确认有效后再信任。
+
+默认护栏：**单次运行最多 200 次调用**、**单 prompt 最多 6000 字符**、
+**2 个并发请求**、**256 条精确缓存**、**10 秒 provider 超时**；任何报错、超时、
+空响应或预算耗尽都会回退到规则模板。16 个角色 × 5 个标的 × 1.5 秒/tick 的
+逐决策调用既贵又受延迟限制，所以把 LLM 放在低频、高价值的叙事层。
+
+实时用量（调用数、缓存命中、失败、token、预算）见 `GET /api/llm/status`；
+修改环境变量后可用 `POST /api/llm/reload` 重建客户端。接口不会返回 API Key。
+LLM 对话行带 `source: "llm"`，LLM 反思带 `[LLM]` 标记；可以先审计生成文本占比，
+再用同一 seed 关闭 LLM 做对比，确认值得付费后再长期开启。
 
 ---
 
@@ -576,6 +645,7 @@ agent-street/
 │   ├── ws_manager.py            # 帧序列化 + 带超时广播
 │   ├── engine/
 │   │   ├── simulation.py        # tick 循环、赛季、快照、账本
+│   │   ├── rules.py             # 校验后的用户可编辑交互规则
 │   │   ├── market_data.py       # 抓取、校验、对齐、缓存、合成
 │   │   ├── indicators.py        # 共享动量/RSI/ATR/波动率引擎
 │   │   ├── strategy.py          # 基因组、奖励学习、模仿、公会
@@ -587,9 +657,11 @@ agent-street/
 │   │   ├── daily_routine.py     # 日程 + BFS 寻路
 │   │   ├── influence_network.py # 信任图 + 环境修正
 │   │   ├── ifind_connector.py   # 可选 iFinD
-│   │   └── llm_client.py        # 异步 OpenAI 兼容客户端
+│   │   └── llm_client.py        # provider 接口 + 预算/缓存/回退
 │   ├── models/                  # 持仓、行情帧、小镇地图
 │   └── mbti/                    # 人格定义与策略先验
+├── config/
+│   └── interaction_rules.json   # 用户可编辑的对话/日程/交易规则
 ├── frontend/
 │   ├── index.html
 │   ├── assets/                  # icon.svg / icon-192 / icon-512
@@ -609,7 +681,10 @@ agent-street/
 │   ├── test_market_data.py
 │   ├── test_indicators.py
 │   ├── test_matching.py
-│   └── test_strategy.py
+│   ├── test_strategy.py
+│   ├── test_rules.py
+│   ├── test_conversation_rules.py
+│   └── test_llm_client.py
 ├── experiments/
 │   ├── data/                    # 发现窗口快照 + 来源元数据
 │   │   └── windows/             # 6 个隐藏窗口快照
@@ -658,8 +733,11 @@ agent-street/
 - **不接实盘。** 这是仿真，不连接券商，不产生真实订单，也不构成投资建议。
 - **可选依赖。** yfinance 是默认数据源；iFinD 与 Alpha Vantage 需显式选择。合成数据
   永远带标注。
-- **LLM 可选。** 规则版反思与对话始终可用；LLM 增强在后台任务中运行，带并发限制与
-  超时，不阻塞 tick。
+- **规则是底座。** 对话、日程、交易阈值与单角色覆盖都在
+  `config/interaction_rules.json` 中；控制回路不需要网络调用。
+- **LLM 可选且有预算。** 规则版反思与对话始终可用；LLM 叙事层默认关闭，受调用预算、
+  缓存、并发与超时限制，任何失败都回退到模板。反思增强是异步的；对话行需要显式开启，
+  并且有时间上限。
 
 ---
 

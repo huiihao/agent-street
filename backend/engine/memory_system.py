@@ -18,6 +18,7 @@ import time
 from dataclasses import dataclass, field
 
 from backend.config import OBSERVATION_MAX, REFLECTION_MAX
+from backend.engine.rules import get_rules
 from backend.mbti.types import TraitProfile
 
 EPS = 1e-9
@@ -49,9 +50,10 @@ class Reflection:
 
 
 class AgentMemory:
-    def __init__(self, agent_id: str, traits: TraitProfile):
+    def __init__(self, agent_id: str, traits: TraitProfile, rules=None):
         self.agent_id = agent_id
         self.traits = traits
+        self.rules = rules or get_rules()
         self.observations: list[Observation] = []
         self.reflections: list[Reflection] = []
         self.current_tick = 0
@@ -92,9 +94,12 @@ class AgentMemory:
         changes: dict[str, float],
     ) -> list[Reflection]:
         self.current_tick = max(self.current_tick, tick)
+        importance_threshold = float(
+            self.rules.get("reflection.importance_threshold", 0.25)
+        )
         pending = [
             obs for obs in self.observations
-            if obs.seq > self._last_reflected_seq and obs.importance >= 0.25
+            if obs.seq > self._last_reflected_seq and obs.importance >= importance_threshold
         ]
         if not pending:
             return []

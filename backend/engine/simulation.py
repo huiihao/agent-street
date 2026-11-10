@@ -40,6 +40,7 @@ from backend.engine.matching_engine import HouseState, MatchingEngine
 from backend.engine.memory_system import AgentMemory
 from backend.engine.observer_engine import ObserverEngine
 from backend.engine.persona_engine import PersonaDecisionEngine
+from backend.engine.rules import get_rules
 from backend.engine.strategy import StrategyEngine, genome_from_persona
 from backend.mbti.personas import PERSONA_DEFINITIONS
 from backend.models.market import (
@@ -93,7 +94,9 @@ class SimulationLoop:
         learning_scale: float = 1.0,
         imitation_scale: float = 1.0,
         mutation_scale: float = 1.0,
+        rules=None,
     ):
+        self.rules = rules or get_rules()
         self.seed = SIM_SEED if seed is None else int(seed)
         self.enable_learning = bool(enable_learning)
         self.enable_imitation = bool(enable_imitation)
@@ -107,7 +110,7 @@ class SimulationLoop:
         self.house = HouseState()
         self.market = HistoricalDataProvider(SYMBOLS)
         self.indicators = IndicatorEngine(SYMBOLS)
-        self.decision_engine = PersonaDecisionEngine()
+        self.decision_engine = PersonaDecisionEngine(self.rules)
         self.strategy_engine = StrategyEngine(
             INITIAL_CASH,
             learning_scale=self.learning_scale,
@@ -119,7 +122,7 @@ class SimulationLoop:
         self.matching_engine = MatchingEngine()
         self.memories: dict[str, AgentMemory] = {}
         self.routines: dict[str, DailyRoutine] = {}
-        self.conversation_system = ConversationSystem()
+        self.conversation_system = ConversationSystem(self.rules)
         self.agent_positions: dict[str, tuple[int, int]] = {}
 
         self._speed_multiplier = 1.0
@@ -165,6 +168,7 @@ class SimulationLoop:
     def reset(self) -> None:
         """Stop and rebuild every run-scoped structure (market replay rewinds)."""
         self.stop()
+        self._reset_llm_budget()
         if self.market.loaded:
             self.market.reset_index()
         if self.seed:
@@ -209,7 +213,7 @@ class SimulationLoop:
                 peak_equity=INITIAL_CASH,
             )
             traits = defn["traits"]
-            memory = AgentMemory(pid, traits)
+            memory = AgentMemory(pid, traits, self.rules)
             self.memories[pid] = memory
             self.decision_engine.register_memory(pid, memory)
 
@@ -217,7 +221,7 @@ class SimulationLoop:
             self.strategy_engine.register(pid, genome)
             self.decision_engine.register_strategy(pid, genome)
 
-            routine = DailyRoutine(pid, traits)
+            routine = DailyRoutine(pid, traits, self.rules)
             self.routines[pid] = routine
             self.agent_positions[pid] = routine.current_tile
             self._activity[pid] = "idle"
@@ -277,6 +281,16 @@ class SimulationLoop:
         changes = dict(snap.changes)
         world_hour = snap.world_hour
 
+        # Pick up hand edits to config/interaction_rules.json without a restart.
+        # Conversation, reflection and trading rules are read live; routine
+        # changes intentionally wait for the next reset because agents may be
+        # midway through a path.
+        if self.tick % 20 == 0:
+            try:
+                self.rules.reload_if_changed()
+            except Exception:
+                pass
+
         # Indicators: reset after a replay loop so the artificial price jump
         # never leaks into momentum or volatility.
         if snap.looped:
@@ -285,6 +299,7 @@ class SimulationLoop:
             # beginning of the next replay) and gives the strategy population a
             # clean generation 0, while the 3D world stays alive.
             self._cancel_llm_tasks()
+            self._reset_llm_budget()
             self.tick = 0
             self._init_all()
         metrics = self.indicators.update(snap.bars)
@@ -299,7 +314,10 @@ class SimulationLoop:
                 location_changes[pid] = new_loc
 
         # 2. Reflections (rule-based immediately; optional LLM enrichment)
-        if self.tick % REFLECTION_EVERY_N_TICKS == 0:
+        reflection_every = int(self.rules.get(
+            "reflection.every_n_ticks", REFLECTION_EVERY_N_TICKS,
+        ))
+        if reflection_every > 0 and self.tick % reflection_every == 0:
             for pid, memory in self.memories.items():
                 memory.reflect(self.tick, prices, changes)
             self._schedule_llm_reflections(prices, changes)
@@ -445,6 +463,7 @@ class SimulationLoop:
                         "speaker": turn.speaker_id,
                         "content": turn.content,
                         "sentiment": round(turn.sentiment_effect, 2),
+                        "source": turn.source,
                     }
                     for turn in conv.turns
                 ],
@@ -618,7 +637,7 @@ class SimulationLoop:
             from backend.engine.llm_client import llm_available
         except Exception:
             return
-        if not llm_available():
+        if not llm_available("reflection"):
             return
         if len(self._llm_tasks) >= 6:
             return
@@ -626,8 +645,9 @@ class SimulationLoop:
         ids = list(self.personas.keys())
         if not ids:
             return
+        per_batch = int(self.rules.get("reflection.llm_per_batch", LLM_REFLECTIONS_PER_BATCH))
         picks = []
-        for _ in range(min(LLM_REFLECTIONS_PER_BATCH, len(ids))):
+        for _ in range(min(max(0, per_batch), len(ids))):
             picks.append(ids[self._llm_cursor % len(ids)])
             self._llm_cursor += 1
 
@@ -646,7 +666,7 @@ class SimulationLoop:
         changes: dict[str, float],
     ) -> None:
         from backend.engine.llm_client import generate_reflection, llm_available
-        if not llm_available():
+        if not llm_available("reflection"):
             return
         memory = self.memories.get(pid)
         defn = PERSONA_DEFINITIONS.get(pid)
@@ -675,6 +695,15 @@ class SimulationLoop:
             if not task.done():
                 task.cancel()
         self._llm_tasks.clear()
+
+    @staticmethod
+    def _reset_llm_budget() -> None:
+        """A replay loop or manual reset starts a fresh optional-LLM budget."""
+        try:
+            from backend.engine.llm_client import reset_llm_stats
+            reset_llm_stats()
+        except Exception:
+            pass
 
     # ── persistence & status ─────────────────────────────────
 

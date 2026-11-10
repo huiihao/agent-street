@@ -1,0 +1,183 @@
+{
+  "_readme": "Edit this file to change the town's default behaviour. The simulation never calls an LLM unless LLM_ENABLED=true and an API key is present. Use the 'home' placeholder in routines; it resolves to each agent's house.",
+  "version": 1,
+  "conversation": {
+    "radius": 4,
+    "chance": 0.3,
+    "cooldown_ticks": 5,
+    "max_per_tick": 2,
+    "debate_chance": 0.12,
+    "location_multipliers": {
+      "home": 1.0,
+      "cafe": 1.0,
+      "market": 1.0,
+      "library": 1.0,
+      "square": 1.0,
+      "park": 1.0,
+      "rumor": 1.0,
+      "lab": 1.0,
+      "hall": 1.0,
+      "observatory": 1.0,
+      "math_tower": 1.0,
+      "fortune_tent": 1.0
+    },
+    "templates": {
+      "greetings": [
+        "What's your read on {symbol} today?",
+        "How's your book holding up?",
+        "Did you see the {symbol} tape just now?",
+        "Volatility is doing all the talking today.",
+        "I keep staring at {symbol} and can't decide.",
+        "You look like you've seen something in {symbol}.",
+        "Market feels {sentiment_word}. Am I wrong?",
+        "Quick sanity check: are you long or flat here?"
+      ],
+      "bullish": [
+        "I'm adding {symbol}. The bid keeps stepping up.",
+        "{symbol} has room — the trend is doing the work.",
+        "I bought more this morning. The data looks clean.",
+        "Everyone's leaning in. I'd rather be early than late.",
+        "The pullback was bought in seconds. That tells you something."
+      ],
+      "bearish": [
+        "I'm trimming {symbol}. The risk isn't paying anymore.",
+        "Something feels heavy in this tape.",
+        "I sold {symbol} this morning. I'll take the win.",
+        "The bounce is thin. I'm not chasing it.",
+        "Cash is a position, and right now it's my favourite one."
+      ],
+      "neutral": [
+        "I'm flat and watching. No edge here yet.",
+        "Could go either way. I'll let the market tip its hand.",
+        "Waiting for the next bar before I do anything.",
+        "The signal is muddy. I'd rather miss it than force it.",
+        "Let me check my numbers again before we talk size."
+      ],
+      "sentiment_words": [
+        "bullish",
+        "bearish",
+        "choppy",
+        "quiet",
+        "frantic",
+        "sleepy",
+        "heavy",
+        "springy"
+      ],
+      "debate": [
+        "{symbol} is mispriced — the numbers support the long.",
+        "Or the market already priced the good news.",
+        "Then the risk/reward wasn't in your favour to begin with."
+      ]
+    }
+  },
+  "reflection": {
+    "every_n_ticks": 5,
+    "importance_threshold": 0.25,
+    "llm_per_batch": 2
+  },
+  "routines": {
+    "perceiving_duration_delta": -1,
+    "wander_chance": 0.1,
+    "extravert": [
+      [
+        "home",
+        3
+      ],
+      [
+        "cafe",
+        3
+      ],
+      [
+        "rumor",
+        3
+      ],
+      [
+        "market",
+        3
+      ],
+      [
+        "hall",
+        3
+      ],
+      [
+        "square",
+        3
+      ],
+      [
+        "home",
+        2
+      ]
+    ],
+    "thinking": [
+      [
+        "home",
+        2
+      ],
+      [
+        "library",
+        4
+      ],
+      [
+        "lab",
+        4
+      ],
+      [
+        "market",
+        3
+      ],
+      [
+        "cafe",
+        2
+      ],
+      [
+        "square",
+        2
+      ],
+      [
+        "library",
+        2
+      ],
+      [
+        "home",
+        2
+      ]
+    ],
+    "default": [
+      [
+        "home",
+        3
+      ],
+      [
+        "park",
+        4
+      ],
+      [
+        "cafe",
+        3
+      ],
+      [
+        "square",
+        2
+      ],
+      [
+        "rumor",
+        2
+      ],
+      [
+        "hall",
+        2
+      ],
+      [
+        "home",
+        2
+      ]
+    ]
+  },
+  "trading": {
+    "buy_threshold": 0.12,
+    "sell_threshold": -0.1,
+    "max_position_pct": 0.32,
+    "panic_cooldown_ticks": 12
+  },
+  "agents": {}
+}

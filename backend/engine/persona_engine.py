@@ -24,6 +24,7 @@ from backend.config import (
 )
 from backend.engine.indicators import MarketMetrics, SymbolMetrics
 from backend.engine.market_data import MarketSnapshot
+from backend.engine.rules import get_rules
 from backend.engine.strategy import StrategyGenome
 from backend.engine.memory_system import AgentMemory
 from backend.mbti.types import TradingParams
@@ -44,7 +45,8 @@ def _tanh(value: float) -> float:
 
 
 class PersonaDecisionEngine:
-    def __init__(self):
+    def __init__(self, rules=None):
+        self.rules = rules or get_rules()
         self.memories: dict[str, AgentMemory] = {}
         self.strategies: dict[str, StrategyGenome] = {}
         self.influence = None  # InfluenceNetwork, injected by the simulation
@@ -72,6 +74,20 @@ class PersonaDecisionEngine:
             return []
         persona.last_decision_tick = tick
 
+        pid = persona.persona_id
+        buy_threshold = float(self.rules.for_agent(
+            pid, "trading.buy_threshold", BUY_THRESHOLD,
+        ))
+        sell_threshold = float(self.rules.for_agent(
+            pid, "trading.sell_threshold", SELL_THRESHOLD,
+        ))
+        panic_cooldown = int(self.rules.for_agent(
+            pid, "trading.panic_cooldown_ticks", PANIC_COOLDOWN_TICKS,
+        ))
+        max_position_pct = float(self.rules.for_agent(
+            pid, "trading.max_position_pct", MAX_POSITION_PCT,
+        ))
+
         prices = {s: b.close for s, b in snapshot.bars.items()}
         equity = persona.equity(prices)
         if equity <= 0:
@@ -94,7 +110,7 @@ class PersonaDecisionEngine:
         effective_panic = params.panic_threshold * (1.0 + 0.25 * memory_sentiment)
         if (
             drawdown < effective_panic
-            and tick - persona.last_panic_tick >= PANIC_COOLDOWN_TICKS
+            and tick - persona.last_panic_tick >= panic_cooldown
             and any(h.shares > 0 for h in persona.holdings.values())
         ):
             intents: list[TradeIntent] = []
@@ -225,14 +241,15 @@ class PersonaDecisionEngine:
                     (0.6 + 0.8 * genome.patience) if genome else 1.0
                 )
                 min_hold = max(1, int(hold_base * 0.5))
-                if held_ticks < min_hold and composite > SELL_THRESHOLD * 1.8:
+                if held_ticks < min_hold and composite > sell_threshold * 1.8:
                     continue
 
             # ── entries / exits ──────────────────────────────
-            if composite > BUY_THRESHOLD:
-                conviction = (composite - BUY_THRESHOLD) / max(1.0 - BUY_THRESHOLD, EPS)
+            if composite > buy_threshold:
+                conviction = (composite - buy_threshold) / max(1.0 - buy_threshold, EPS)
                 budget = self._position_budget(
                     persona, params, price, equity, conviction, held_shares, genome,
+                    max_position_pct=max_position_pct,
                 )
                 shares = int(budget / price) if price > 0 else 0
                 if shares >= 1 and persona.cash >= shares * price:
@@ -258,8 +275,8 @@ class PersonaDecisionEngine:
                     # readable and prevents firing five orders in one tick.
                     break
 
-            elif composite < SELL_THRESHOLD and held_shares > 0:
-                conviction = (SELL_THRESHOLD - composite) / max(1.0 + SELL_THRESHOLD, EPS)
+            elif composite < sell_threshold and held_shares > 0:
+                conviction = (sell_threshold - composite) / max(1.0 + sell_threshold, EPS)
                 qty = max(1, int(held_shares * (0.30 + 0.70 * conviction)))
                 qty = min(qty, held_shares)
                 if held_shares - qty == 1:
@@ -286,9 +303,11 @@ class PersonaDecisionEngine:
         conviction: float,
         held_shares: int,
         genome: StrategyGenome | None = None,
+        max_position_pct: float | None = None,
     ) -> float:
         risk = genome.risk if genome else params.risk_tolerance
-        max_position_pct = MAX_POSITION_PCT * (0.55 + 0.9 * risk)
+        position_cap = (MAX_POSITION_PCT if max_position_pct is None else max_position_pct)
+        max_position_pct = position_cap * (0.55 + 0.9 * risk)
         max_position_value = equity * max_position_pct
         current_value = held_shares * price
         room = max(0.0, max_position_value - current_value)

@@ -4,7 +4,7 @@
 <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License">
 <img src="https://img.shields.io/badge/agents-20-ff69b4?style=flat-square" alt="Agents">
 <img src="https://img.shields.io/badge/renderer-Three.js%20r160-5ad1ff?style=flat-square" alt="Three.js">
-<img src="https://img.shields.io/badge/tests-21-success?style=flat-square" alt="Tests">
+<img src="https://img.shields.io/badge/tests-40-success?style=flat-square" alt="Tests">
 
 </div>
 
@@ -514,8 +514,9 @@ python -m unittest discover -s tests -v
 
 ## Configuration
 
-Every value can be overridden with an environment variable. Defaults live in
-`backend/config.py`.
+Every value can be overridden with an environment variable. System defaults live
+in `backend/config.py`; interaction behaviour lives in
+`config/interaction_rules.json`.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -534,10 +535,18 @@ Every value can be overridden with an environment variable. Defaults live in
 | `SIM_SEED` | `7` | Deterministic decisions/synthetic data (`0` = random) |
 | `ALPHA_VANTAGE_API_KEY` | empty | Explicit source only |
 | `IFIND_API_KEY` / `IFIND_API_SECRET` | empty | Optional institutional iFinD |
-| `LLM_ENABLED` | `false` | Background LLM reflection enrichment |
-| `LLM_API_KEY` | empty | OpenAI-compatible key |
-| `LLM_BASE_URL` / `LLM_MODEL` | OpenAI / `gpt-4o-mini` | Any compatible endpoint |
-| `LLM_CONVERSATIONS` | `false` | Opt-in LLM conversation lines |
+| `LLM_ENABLED` | `false` | Optional narrative layer; rules always run |
+| `LLM_PROVIDER` | `openai` | `openai / deepseek / ollama / custom` |
+| `LLM_MODE` | empty | `off / reflection / conversation / all`; empty derives from the legacy flags |
+| `LLM_API_KEY` | empty | Key for hosted providers (not Ollama) |
+| `LLM_BASE_URL` / `LLM_MODEL` | empty | Empty selects the provider preset |
+| `LLM_MAX_CALLS_PER_RUN` | `200` | Hard call budget; `0` = unlimited |
+| `LLM_MAX_INPUT_CHARS` | `6000` | Prompt-size guardrail |
+| `LLM_MAX_TOKENS` / `LLM_TIMEOUT_SEC` | `150` / `10` | Output cap and request timeout |
+| `LLM_MAX_CONCURRENCY` | `2` | Parallel provider calls |
+| `LLM_CACHE_SIZE` | `256` | Exact-prompt response cache |
+| `LLM_CONVERSATIONS` | `false` | Legacy alias; prefer `LLM_MODE` |
+| `INTERACTION_RULES_PATH` | `config/interaction_rules.json` | User-editable rule book |
 
 ```powershell
 # Windows PowerShell
@@ -551,6 +560,74 @@ python run.py
 # Linux / macOS
 SYMBOLS=AAPL,NVDA,META HIST_INTERVAL=1m python run.py
 ```
+
+### Rule-first interactions and optional LLM
+
+The town is **rule-first by default**. No API key is required, and every run is
+reproducible. Conversations, routines and trading thresholds live in
+`config/interaction_rules.json`; edit the JSON directly or use the API.
+
+| Section | What it controls |
+|---|---|
+| `conversation` | radius, chance, cooldown, max conversations per tick, per-location multipliers, greeting/bull/bear/neutral templates |
+| `routines` | three daily schedules (`extravert`, `thinking`, `default`), wander chance, perceiving-type duration delta |
+| `trading` | buy/sell thresholds, position cap, panic cooldown |
+| `agents` | optional per-agent overrides, e.g. `INTJ.conversation.chance` |
+
+```json
+{
+  "conversation": {"chance": 0.22},
+  "agents": {
+    "INTJ": {"conversation": {"chance": 0.08}, "trading": {"buy_threshold": 0.16}}
+  }
+}
+```
+
+```bash
+# Read / update / reset the live rule book
+curl http://localhost:8766/api/interaction/rules
+curl -X PUT http://localhost:8766/api/interaction/rules \
+  -H "Content-Type: application/json" \
+  -d '{"conversation":{"chance":0.22}}'
+curl -X POST http://localhost:8766/api/interaction/rules/reset
+```
+
+Updates are validated and persisted. Conversation, reflection and trading rules
+apply live; routine changes apply after a reset because an agent may be midway
+through a path. Explicit environment variables still override the JSON (handy
+for CI/ablations), and `INTERACTION_RULES_PATH` can point at another rule book.
+
+**Optional LLM narrative layer.** The LLM only writes language; it cannot place
+orders, bypass risk controls, or change the accounting. Enable it explicitly:
+
+```powershell
+$env:LLM_ENABLED="true"
+$env:LLM_PROVIDER="deepseek"
+$env:LLM_API_KEY="your-key"
+$env:LLM_MODE="conversation"   # conversation | reflection | all
+python run.py
+```
+
+DeepSeek uses `https://api.deepseek.com/v1` and `deepseek-chat` automatically.
+OpenAI, Ollama (no key) and custom OpenAI-compatible endpoints work the same way.
+The current capabilities are **conversation** and **reflection**; the trading
+control loop stays rule-based so results remain cheap, deterministic and
+comparable. Extending the same provider interface to decisions is possible, but
+should be evaluated A/B before it is trusted.
+
+Guardrails are on by default: at most **200 calls per run**, **6000 input
+characters per prompt**, **2 concurrent requests**, a **256-entry exact-prompt
+cache**, a **10 s provider timeout**, and a **rule-template fallback on any error,
+timeout, empty response or exhausted budget**. At 16 agents, 5 symbols and a
+1.5 s tick, calling an LLM for every decision would be both expensive and
+latency-bound; the narrative layer is the high-value, low-frequency surface.
+
+Inspect live usage (counts, cache hits, failures, tokens, remaining budget) at
+`GET /api/llm/status`; rebuild the client after changing environment variables
+with `POST /api/llm/reload`. The API key is never returned. LLM conversation
+turns are tagged `source: "llm"` and LLM reflections are marked `[LLM]`, so you
+can audit the share of generated text and compare the same seed with the layer
+off before deciding to keep paying for it.
 
 ---
 
@@ -626,6 +703,7 @@ agent-street/
 │   ├── ws_manager.py            # frame serialisation + bounded broadcasts
 │   ├── engine/
 │   │   ├── simulation.py        # tick loop, sessions, snapshots, accounting
+│   │   ├── rules.py             # validated, user-editable interaction rules
 │   │   ├── market_data.py       # fetch, validate, align, cache, synthetic
 │   │   ├── indicators.py        # shared momentum/RSI/ATR/volatility engine
 │   │   ├── strategy.py          # genomes, reward learning, imitation, guilds
@@ -637,9 +715,11 @@ agent-street/
 │   │   ├── daily_routine.py     # schedules + BFS movement
 │   │   ├── influence_network.py # trust graph + environment modifiers
 │   │   ├── ifind_connector.py   # optional iFinD connector
-│   │   └── llm_client.py        # async OpenAI-compatible client
+│   │   └── llm_client.py        # provider interface + budget/cache/fallback
 │   ├── models/                  # portfolio, market frames, town map
 │   └── mbti/                    # personality definitions and priors
+├── config/
+│   └── interaction_rules.json   # user-editable conversation/routine/trading rules
 ├── frontend/
 │   ├── index.html
 │   ├── assets/                  # icon.svg / icon-192 / icon-512
@@ -659,7 +739,10 @@ agent-street/
 │   ├── test_market_data.py
 │   ├── test_indicators.py
 │   ├── test_matching.py
-│   └── test_strategy.py
+│   ├── test_strategy.py
+│   ├── test_rules.py
+│   ├── test_conversation_rules.py
+│   └── test_llm_client.py
 ├── experiments/
 │   ├── data/                    # discovery snapshot + provenance metadata
 │   │   └── windows/             # six held-out frozen windows
@@ -712,8 +795,14 @@ agent-street/
   financial advice.
 - **Optional dependencies.** yfinance is the default; iFinD and Alpha Vantage are
   optional and explicitly selected. Synthetic data is always labelled.
-- **LLM is optional.** Rule-based reflections and conversations are always available;
-  LLM enrichment runs in background tasks with concurrency limits and timeouts.
+- **Rules are the substrate.** Conversations, routines, trading thresholds and
+  per-agent overrides live in `config/interaction_rules.json`. The control loop
+  never needs a network call.
+- **LLM is optional and budgeted.** Rule-based reflections and conversations are
+  always available; the LLM narrative layer is off by default, capped by a call
+  budget, cache, concurrency and timeout, and falls back to templates on any
+  failure. Reflection enrichment is asynchronous; conversation lines are opt-in
+  and time-boxed.
 
 ---
 

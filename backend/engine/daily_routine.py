@@ -1,4 +1,5 @@
 import random
+from backend.engine.rules import get_rules
 from backend.mbti.types import TraitProfile
 from backend.models.town import (
     Location, LOCATIONS, HOME_ASSIGNMENTS, bfs_path,
@@ -7,9 +8,10 @@ from backend.models.town import (
 
 
 class DailyRoutine:
-    def __init__(self, agent_id: str, traits: TraitProfile):
+    def __init__(self, agent_id: str, traits: TraitProfile, rules=None):
         self.agent_id = agent_id
         self.traits = traits
+        self.rules = rules or get_rules()
         self.home_id = HOME_ASSIGNMENTS.get(agent_id, "home_nw")
         self.home = LOCATIONS[self.home_id]
         self.schedule = self._build_schedule()
@@ -22,47 +24,38 @@ class DailyRoutine:
         self.target_location: Location = self.home
 
     def _build_schedule(self) -> list[tuple[str, int]]:
-        """Build a daily schedule as [(location_id, min_ticks), ...]"""
-        schedule: list[tuple[str, int]] = []
-        home_id = self.home_id
+        """Build a daily schedule from the user-editable routine rules.
+
+        The JSON uses the literal ``home`` placeholder, which resolves to the
+        agent's own house. Unknown locations are ignored so a typo in the rules
+        cannot strand an agent outside the town.
+        """
         is_extravert = self.traits.extraversion > 0.5
         is_thinking = self.traits.thinking > 0.5
         is_judging = self.traits.judging > 0.5
-
-        if is_extravert:
-            schedule = [
-                (home_id, 3),
-                ("cafe", 3),
-                ("rumor", 3),
-                ("market", 3),
-                ("hall", 3),
-                ("square", 3),
-                (home_id, 2),
-            ]
-        elif is_thinking:
-            schedule = [
-                (home_id, 2),
-                ("library", 4),
-                ("lab", 4),
-                ("market", 3),
-                ("cafe", 2),
-                ("square", 2),
-                ("library", 2),
-                (home_id, 2),
-            ]
-        else:
-            schedule = [
-                (home_id, 3),
-                ("park", 4),
-                ("cafe", 3),
-                ("square", 2),
-                ("rumor", 2),
-                ("hall", 2),
-                (home_id, 2),
-            ]
-        # Perceiving types wander more (shorter stays)
+        key = "extravert" if is_extravert else "thinking" if is_thinking else "default"
+        raw = self.rules.get(f"routines.{key}", []) or []
+        schedule: list[tuple[str, int]] = []
+        for item in raw:
+            if not isinstance(item, (list, tuple)) or len(item) != 2:
+                continue
+            loc_id, ticks = item
+            if loc_id == "home":
+                loc_id = self.home_id
+            if loc_id not in LOCATIONS:
+                continue
+            try:
+                duration = max(1, int(ticks))
+            except (TypeError, ValueError):
+                continue
+            schedule.append((str(loc_id), duration))
+        if not schedule:
+            # Defensive fallback if a user empties every schedule.
+            schedule = [(self.home_id, 3), ("cafe", 3), ("square", 3), (self.home_id, 2)]
+        # Perceiving types wander more (shorter stays).
         if not is_judging:
-            schedule = [(loc, max(1, t - 1)) for loc, t in schedule]
+            delta = int(self.rules.get("routines.perceiving_duration_delta", -1))
+            schedule = [(loc, max(1, t + delta)) for loc, t in schedule]
         return schedule
 
     def current_location_id(self) -> str:
@@ -118,5 +111,6 @@ class DailyRoutine:
         """Perceiving types occasionally wander to nearby tiles."""
         if self.traits.judging > 0.5:
             return
-        if random.random() < 0.1:  # 10% chance per call
+        chance = float(self.rules.get("routines.wander_chance", 0.10))
+        if random.random() < chance:
             self.current_tile = random_nearby_tile(self.current_tile[0], self.current_tile[1], 2)

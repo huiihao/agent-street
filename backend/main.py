@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -18,6 +18,8 @@ from backend.config import (
     SYMBOLS,
     TICK_INTERVAL_SEC,
 )
+from backend.engine.llm_client import llm_status, reload_client, reset_llm_stats
+from backend.engine.rules import RuleValidationError, get_rules
 from backend.engine.simulation import OBSERVER_DEFS, SimulationLoop
 from backend.mbti.personas import PERSONA_DEFINITIONS
 from backend.models.town import HOME_ASSIGNMENTS, LOCATIONS, TILE_NAMES, TOWN_MAP
@@ -239,9 +241,60 @@ async def sim_stop():
 async def sim_reset():
     if sim:
         sim.reset()
+        reset_llm_stats()
         await ws_manager.broadcast_sim_state(sim)
         await ws_manager.broadcast({"type": "reset", "data": sim.status()})
     return {"ok": True, "status": sim.status() if sim else None}
+
+
+# ── interaction rules / optional LLM ─────────────────────────
+
+@app.get("/api/interaction/rules")
+async def get_interaction_rules():
+    rules = get_rules()
+    rules.reload_if_changed()
+    return {
+        "source": rules.source,
+        "rules": rules.snapshot(),
+    }
+
+
+@app.put("/api/interaction/rules")
+async def update_interaction_rules(partial: dict):
+    try:
+        rules = get_rules()
+        rules.update(partial)
+    except RuleValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"cannot write rules: {exc}") from exc
+    return {
+        "ok": True,
+        "source": rules.source,
+        "rules": rules.snapshot(),
+        "note": "Conversation, reflection and trading rules apply live; routine changes apply on reset.",
+    }
+
+
+@app.post("/api/interaction/rules/reset")
+async def reset_interaction_rules():
+    try:
+        rules = get_rules()
+        rules.reset()
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"cannot reset rules: {exc}") from exc
+    return {"ok": True, "source": rules.source, "rules": rules.snapshot()}
+
+
+@app.get("/api/llm/status")
+async def get_llm_status():
+    return llm_status()
+
+
+@app.post("/api/llm/reload")
+async def reload_llm():
+    client = reload_client()
+    return {"ok": True, "status": client.status()}
 
 
 # ── WebSocket ────────────────────────────────────────────────
